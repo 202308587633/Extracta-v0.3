@@ -2,11 +2,12 @@ import customtkinter as ctk
 import tkinter as tk
 
 class HistoryTab(ctk.CTkFrame):
-    def __init__(self, parent, on_select_callback, on_delete_callback, on_pagination_callback):
+    def __init__(self, parent, on_select_callback, on_delete_callback, on_pagination_callback, on_extract_callback):
         super().__init__(parent)
         self.on_select_callback = on_select_callback
         self.on_delete_callback = on_delete_callback
         self.on_pagination_callback = on_pagination_callback
+        self.on_extract_callback = on_extract_callback
         self._setup_ui()
         self._setup_context_menu()
 
@@ -52,6 +53,7 @@ class HistoryTab(ctk.CTkFrame):
         self.context_menu.add_command(label="Excluir este HTML", command=self.on_delete_callback)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="🔍 Buscar Paginação e Raspar", command=self.on_pagination_callback)
+        self.context_menu.add_command(label="📋 Extrair Dados da Pesquisa (Nova Aba)", command=self.on_extract_callback)
         self.textbox_content.bind("<Button-3>", self._show_context_menu)
 
     def _show_context_menu(self, event):

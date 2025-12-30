@@ -4,6 +4,7 @@ from viewmodels.main_viewmodel import MainViewModel
 from views.tabs.home_tab import HomeTab
 from views.tabs.log_tab import LogTab
 from views.tabs.history_tab import HistoryTab
+from views.tabs.results_tab import ResultsTab
 
 class MainView(ctk.CTk):
     def __init__(self):
@@ -36,9 +37,13 @@ class MainView(ctk.CTk):
             parent=self.tabview.add("Histórico"),
             on_select_callback=self.viewmodel.load_history_details,
             on_delete_callback=self.viewmodel.delete_history_item,
-            on_pagination_callback=self.viewmodel.check_pagination_and_scrape
+            on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
+            on_extract_callback=self.viewmodel.extract_data_command
         )
         self.history_tab.pack(fill="both", expand=True)
+
+        self.results_tab = ResultsTab(parent=self.tabview.add("Resultados"))
+        self.results_tab.pack(fill="both", expand=True)
 
         self.log_tab = LogTab(parent=self.tabview.add("Log"))
         self.log_tab.pack(fill="both", expand=True)
@@ -71,3 +76,9 @@ class MainView(ctk.CTk):
         
     def after_thread_safe(self, func):
         self.after(0, func)
+    
+    def display_extracted_results(self, data):
+        self.results_tab.display_results(data)
+
+    def switch_to_results_tab(self):
+        self.tabview.set("Resultados")

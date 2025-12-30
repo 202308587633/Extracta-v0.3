@@ -144,3 +144,28 @@ class MainViewModel:
             self._log(f"Erro no loop de paginação: {e}", "red")
         finally:
             self.view.toggle_button(True)
+
+    def extract_data_command(self):
+        if not self.current_history_id:
+            return
+
+        try:
+            result = self.db.get_history_item(self.current_history_id)
+            if not result:
+                return
+            original_url, html = result
+
+            self._log("Extraindo dados da pesquisa...", "yellow")
+            
+            extracted_data = self.scraper.extract_search_results(html, base_url=original_url)
+            
+            if not extracted_data:
+                self._log("Nenhum dado encontrado com o padrão esperado.", "red")
+            else:
+                count = len(extracted_data)
+                self._log(f"Extração concluída: {count} itens encontrados.", "green")
+                self.view.display_extracted_results(extracted_data)
+                self.view.switch_to_results_tab()
+
+        except Exception as e:
+            self._log(f"Erro na extração de dados: {e}", "red")
