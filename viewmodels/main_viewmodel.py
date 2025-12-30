@@ -1,11 +1,13 @@
 import threading
 from models.database import DatabaseModel
 from models.scraper import ScraperModel
+import config
 
 class MainViewModel:
     def __init__(self, view):
         self.view = view
-        self.db = DatabaseModel()
+        # Injeção do nome do banco via config
+        self.db = DatabaseModel(db_name=config.DB_NAME)
         self.scraper = ScraperModel()
 
     def start_scraping_command(self):

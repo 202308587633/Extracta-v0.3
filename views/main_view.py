@@ -1,60 +1,59 @@
 import customtkinter as ctk
+import config
 from viewmodels.main_viewmodel import MainViewModel
+from views.tabs.home_tab import HomeTab
+from views.tabs.log_tab import LogTab
 
 class MainView(ctk.CTk):
     def __init__(self):
         super().__init__()
-
-        self.title("Scraper Minimalista MVVM")
-        self.geometry("800x600")
-        ctk.set_appearance_mode("Dark")
-        ctk.set_default_color_theme("blue")
-
+        self._configure_window()
+        
+        # Inicializa ViewModel passando self (View Principal)
         self.viewmodel = MainViewModel(self)
-
+        
         self._setup_ui()
+
+    def _configure_window(self):
+        self.title(config.APP_TITLE)
+        self.geometry(config.WINDOW_SIZE)
+        ctk.set_appearance_mode(config.THEME_MODE)
+        ctk.set_default_color_theme(config.COLOR_THEME)
 
     def _setup_ui(self):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
 
-        self.tab_home = self.tabview.add("Scraper")
-        self.tab_about = self.tabview.add("Sobre")
+        # Criação das Abas
+        self.home_tab = HomeTab(
+            parent=self.tabview.add("Scraper"), 
+            command_callback=self.viewmodel.start_scraping_command
+        )
+        self.home_tab.pack(fill="both", expand=True)
 
-        # --- Aba Scraper ---
-        self.label_title = ctk.CTkLabel(self.tab_home, text="Web Scraper", font=("Roboto", 24))
-        self.label_title.pack(pady=20)
-
-        self.entry_url = ctk.CTkEntry(self.tab_home, placeholder_text="Digite a URL (ex: google.com)", width=500)
-        self.entry_url.pack(pady=10)
-
-        self.btn_run = ctk.CTkButton(self.tab_home, text="Executar Scraping", command=self.viewmodel.start_scraping_command)
-        self.btn_run.pack(pady=10)
-
-        self.label_status = ctk.CTkLabel(self.tab_home, text="")
-        self.label_status.pack(pady=10)
-
-        self.textbox_result = ctk.CTkTextbox(self.tab_home, width=700, height=300, corner_radius=10)
-        self.textbox_result.pack(pady=10, fill="both", expand=True)
-        self.textbox_result.insert("0.0", "O código HTML aparecerá aqui...")
-        self.textbox_result.configure(state="disabled", font=("Consolas", 12))
-
-        # --- Aba Sobre ---
-        lbl_about = ctk.CTkLabel(self.tab_about, text="Versão 1.1\nArquitetura MVVM", font=("Roboto", 16))
-        lbl_about.pack(pady=50, padx=50)
+        self.log_tab = LogTab(parent=self.tabview.add("Log"))
+        self.log_tab.pack(fill="both", expand=True)
 
     def get_url_input(self):
-        return self.entry_url.get().strip()
+        return self.home_tab.get_url()
 
     def update_status(self, message, color_name="white"):
-        color_map = {"red": "#FF5555", "green": "#50FA7B", "yellow": "#F1FA8C", "white": "#F8F8F2"}
-        self.label_status.configure(text=message, text_color=color_map.get(color_name, "white"))
-
-    def toggle_button(self, state):
-        self.btn_run.configure(state="normal" if state else "disabled")
+        # Mapeamento de cores (mantido do config ou local)
+        colors = {
+            "red": "#FF5555", 
+            "green": "#50FA7B", 
+            "yellow": "#F1FA8C", 
+            "white": "#F8F8F2"
+        }
         
+        # 1. Atualiza o label visual na aba Home
+        self.home_tab.set_status(message, colors.get(color_name, "white"))
+        
+        # 2. Registra no histórico da aba Log
+        self.log_tab.append_log(message)
+        
+    def toggle_button(self, state):
+        self.home_tab.set_button_state(state)
+
     def display_html_content(self, html_content):
-        self.textbox_result.configure(state="normal")
-        self.textbox_result.delete("0.0", "end")
-        self.textbox_result.insert("0.0", html_content)
-        self.textbox_result.configure(state="disabled")
+        self.home_tab.display_html(html_content)
