@@ -13,7 +13,9 @@ class MainView(ctk.CTk):
         self._configure_window()
         self.viewmodel = MainViewModel(self)
         self._setup_ui()
-        self.viewmodel.load_history_list()
+        
+        # INICIALIZAÇÃO DE DADOS (Histórico + Tabela Minerada)
+        self.viewmodel.initialize_data()
 
     def _configure_window(self):
         self.title(config.APP_TITLE)
@@ -33,7 +35,8 @@ class MainView(ctk.CTk):
             on_select_callback=self.viewmodel.load_history_details,
             on_delete_callback=self.viewmodel.delete_history_item,
             on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
-            on_extract_callback=self.viewmodel.extract_data_command
+            on_extract_callback=self.viewmodel.extract_data_command,
+            on_browser_callback=self.viewmodel.open_html_in_browser # Conexão do novo comando
         )
         self.history_tab.pack(fill="both", expand=True)
 

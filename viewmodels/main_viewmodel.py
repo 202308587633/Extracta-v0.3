@@ -5,6 +5,9 @@ from models.database import DatabaseModel
 from models.scraper import ScraperModel
 from models.parsers.vufind_parser import VufindParser # Import necessário para o Passo 2
 import config
+import os
+import tempfile
+import webbrowser
 
 class MainViewModel: # Certifique-se de que o nome da classe está correto
     def __init__(self, view):
@@ -125,16 +128,57 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             result = self.db.get_history_item(self.current_history_id)
             if not result: return
             url, html = result
-            self._log("Extraindo dados com parser especializado...", "yellow")
+            self._log("Extraindo e salvando dados...", "yellow")
             
             parser = VufindParser()
             data = self.scraper.extract_data(html, parser, base_url=url)
             
             if not data:
-                self._log("Nenhum dado encontrado.", "red")
+                self._log("Nenhum dado novo encontrado.", "red")
             else:
-                self._log(f"Sucesso! {len(data)} itens extraídos.", "green")
-                self.view.display_extracted_results(data)
+                # GRAVAÇÃO EM BANCO DE DADOS
+                self.db.save_extracted_results(data)
+                
+                # Recupera lista completa (novos + antigos) para atualizar a tela
+                all_data = self.db.get_all_extracted_results()
+                self._log(f"Extração concluída e salva! Total: {len(all_data)}", "green")
+                self.view.display_extracted_results(all_data)
                 self.view.switch_to_results_tab()
         except Exception as e:
             self._log(f"Erro na extração: {e}", "red")
+
+    def open_html_in_browser(self):
+        """Recupera o HTML do banco e abre em uma aba do navegador"""
+        if not self.current_history_id:
+            self._log("Selecione um item do histórico primeiro.", "red")
+            return
+
+        try:
+            # Recupera o conteúdo HTML do banco de dados
+            html_content = self.db.get_history_content(self.current_history_id)
+            
+            if not html_content:
+                self._log("Erro: Conteúdo HTML vazio.", "red")
+                return
+
+            # Cria um arquivo HTML temporário para visualização
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+
+            # Abre o arquivo no navegador padrão
+            webbrowser.open(f"file://{temp_path}")
+            self._log("HTML aberto no navegador com sucesso.", "green")
+
+        except Exception as e:
+            self._log(f"Erro ao abrir no navegador: {e}", "red")
+
+    def initialize_data(self):
+        """Carrega o histórico e os dados minerados na inicialização"""
+        self.load_history_list()
+        try:
+            saved_data = self.db.get_all_extracted_results()
+            if saved_data:
+                self.view.display_extracted_results(saved_data)
+        except Exception as e:
+            self._log(f"Erro ao carregar dados salvos: {e}", "red")
