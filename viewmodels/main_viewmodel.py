@@ -8,6 +8,7 @@ class MainViewModel:
         self.view = view
         self.db = DatabaseModel(db_name=config.DB_NAME)
         self.scraper = ScraperModel()
+        self.current_history_id = None
 
     def start_scraping_command(self):
         url = self.view.get_url_input()
@@ -61,8 +62,24 @@ class MainViewModel:
             self._log(f"Erro ao carregar histórico: {e}", "red")
 
     def load_history_details(self, history_id):
+        self.current_history_id = history_id
         try:
             html = self.db.get_history_content(history_id)
             self.view.display_history_content(html)
         except Exception as e:
             self._log(f"Erro ao carregar detalhe: {e}", "red")
+
+    def delete_history_item(self):
+        if not self.current_history_id:
+            return
+
+        try:
+            self.db.delete_history(self.current_history_id)
+            self._log(f"Item {self.current_history_id} excluído com sucesso.", "green")
+            
+            self.current_history_id = None
+            self.view.display_history_content("")
+            self.load_history_list()
+            
+        except Exception as e:
+            self._log(f"Erro ao excluir item: {e}", "red")

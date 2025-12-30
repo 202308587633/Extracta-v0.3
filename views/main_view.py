@@ -9,12 +9,10 @@ class MainView(ctk.CTk):
         super().__init__()
         self._configure_window()
         
-        # Inicializa ViewModel passando self (View Principal)
         self.viewmodel = MainViewModel(self)
         
         self._setup_ui()
         
-        # Carrega o histórico ao iniciar
         self.viewmodel.load_history_list()
 
     def _configure_window(self):
@@ -27,7 +25,6 @@ class MainView(ctk.CTk):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
 
-        # Criação das Abas
         self.home_tab = HomeTab(
             parent=self.tabview.add("Scraper"), 
             command_callback=self.viewmodel.start_scraping_command
@@ -36,7 +33,8 @@ class MainView(ctk.CTk):
 
         self.history_tab = HistoryTab(
             parent=self.tabview.add("Histórico"),
-            on_select_callback=self.viewmodel.load_history_details
+            on_select_callback=self.viewmodel.load_history_details,
+            on_delete_callback=self.viewmodel.delete_history_item
         )
         self.history_tab.pack(fill="both", expand=True)
 
