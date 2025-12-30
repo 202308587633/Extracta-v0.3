@@ -4,6 +4,7 @@ from viewmodels.main_viewmodel import MainViewModel
 from views.tabs.home_tab import HomeTab
 from views.tabs.log_tab import LogTab
 from views.tabs.history_tab import HistoryTab
+
 class MainView(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -34,7 +35,8 @@ class MainView(ctk.CTk):
         self.history_tab = HistoryTab(
             parent=self.tabview.add("Histórico"),
             on_select_callback=self.viewmodel.load_history_details,
-            on_delete_callback=self.viewmodel.delete_history_item
+            on_delete_callback=self.viewmodel.delete_history_item,
+            on_pagination_callback=self.viewmodel.check_pagination_and_scrape
         )
         self.history_tab.pack(fill="both", expand=True)
 

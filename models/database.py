@@ -55,3 +55,9 @@ class DatabaseModel:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM history WHERE id = ?", (history_id,))
             conn.commit()
+
+    def get_history_item(self, history_id):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT url, html_content FROM history WHERE id = ?", (history_id,))
+            return cursor.fetchone()

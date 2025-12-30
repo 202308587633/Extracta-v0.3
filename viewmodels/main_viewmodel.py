@@ -1,3 +1,5 @@
+import re
+import time
 import threading
 from models.database import DatabaseModel
 from models.scraper import ScraperModel
@@ -83,3 +85,62 @@ class MainViewModel:
             
         except Exception as e:
             self._log(f"Erro ao excluir item: {e}", "red")
+
+    def check_pagination_and_scrape(self):
+        if not self.current_history_id:
+            return
+
+        try:
+            result = self.db.get_history_item(self.current_history_id)
+            if not result:
+                return
+            original_url, html = result
+
+            page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
+            
+            if not page_numbers:
+                self._log("Nenhuma paginação numérica encontrada neste HTML.", "yellow")
+                return
+
+            max_page = max(map(int, page_numbers))
+            
+            if max_page <= 1:
+                self._log("Apenas 1 página detectada.", "yellow")
+                return
+
+            self._log(f"Paginação detectada! Total: {max_page} páginas. Iniciando captura...", "green")
+            self.view.toggle_button(False)
+
+            thread = threading.Thread(
+                target=self._run_pagination_task, 
+                args=(original_url, max_page)
+            )
+            thread.start()
+
+        except Exception as e:
+            self._log(f"Erro na análise de paginação: {e}", "red")
+
+    def _run_pagination_task(self, base_url, max_page):
+        try:
+            separator = "&" if "?" in base_url else "?"
+            
+            for i in range(2, max_page + 1):
+                if "page=" in base_url:
+                    current_url = re.sub(r'page=\d+', f'page={i}', base_url)
+                else:
+                    current_url = f"{base_url}{separator}page={i}"
+
+                self._log(f"Capturando Página {i}/{max_page}...", "yellow")
+                
+                html = self.scraper.fetch_html(current_url)
+                self.db.save_scraping(current_url, html)
+                
+                time.sleep(1)
+
+            self._log(f"Ciclo completo! {max_page} páginas capturadas.", "green")
+            self.view.after_thread_safe(self.load_history_list)
+
+        except Exception as e:
+            self._log(f"Erro no loop de paginação: {e}", "red")
+        finally:
+            self.view.toggle_button(True)
