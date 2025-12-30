@@ -36,3 +36,16 @@ class DatabaseModel:
             cursor = conn.cursor()
             cursor.execute("INSERT INTO logs (message) VALUES (?)", (message,))
             conn.commit()
+
+    def get_history_list(self):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, url, created_at FROM history ORDER BY created_at DESC")
+            return cursor.fetchall()
+
+    def get_history_content(self, history_id):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT html_content FROM history WHERE id = ?", (history_id,))
+            result = cursor.fetchone()
+            return result[0] if result else ""

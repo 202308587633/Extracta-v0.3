@@ -3,7 +3,7 @@ import config
 from viewmodels.main_viewmodel import MainViewModel
 from views.tabs.home_tab import HomeTab
 from views.tabs.log_tab import LogTab
-
+from views.tabs.history_tab import HistoryTab
 class MainView(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -13,6 +13,9 @@ class MainView(ctk.CTk):
         self.viewmodel = MainViewModel(self)
         
         self._setup_ui()
+        
+        # Carrega o histórico ao iniciar
+        self.viewmodel.load_history_list()
 
     def _configure_window(self):
         self.title(config.APP_TITLE)
@@ -31,6 +34,12 @@ class MainView(ctk.CTk):
         )
         self.home_tab.pack(fill="both", expand=True)
 
+        self.history_tab = HistoryTab(
+            parent=self.tabview.add("Histórico"),
+            on_select_callback=self.viewmodel.load_history_details
+        )
+        self.history_tab.pack(fill="both", expand=True)
+
         self.log_tab = LogTab(parent=self.tabview.add("Log"))
         self.log_tab.pack(fill="both", expand=True)
 
@@ -38,7 +47,6 @@ class MainView(ctk.CTk):
         return self.home_tab.get_url()
 
     def update_status(self, message, color_name="white"):
-        # Mapeamento de cores (mantido do config ou local)
         colors = {
             "red": "#FF5555", 
             "green": "#50FA7B", 
@@ -46,10 +54,7 @@ class MainView(ctk.CTk):
             "white": "#F8F8F2"
         }
         
-        # 1. Atualiza o label visual na aba Home
         self.home_tab.set_status(message, colors.get(color_name, "white"))
-        
-        # 2. Registra no histórico da aba Log
         self.log_tab.append_log(message)
         
     def toggle_button(self, state):
@@ -57,3 +62,12 @@ class MainView(ctk.CTk):
 
     def display_html_content(self, html_content):
         self.home_tab.display_html(html_content)
+
+    def update_history_list(self, items):
+        self.history_tab.update_list(items)
+
+    def display_history_content(self, html):
+        self.history_tab.display_content(html)
+        
+    def after_thread_safe(self, func):
+        self.after(0, func)

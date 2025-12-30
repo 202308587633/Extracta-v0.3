@@ -36,6 +36,9 @@ class MainViewModel:
             self.view.display_html_content(html)
             
             self._log("Sucesso! Processo finalizado.", "green")
+            
+            self.view.after_thread_safe(self.load_history_list)
+            
         except Exception as e:
             error_msg = f"Falha: {str(e)}"
             self._log(error_msg, "red")
@@ -49,3 +52,17 @@ class MainViewModel:
         except:
             pass
         self.view.update_status(message, color)
+
+    def load_history_list(self):
+        try:
+            items = self.db.get_history_list()
+            self.view.update_history_list(items)
+        except Exception as e:
+            self._log(f"Erro ao carregar histórico: {e}", "red")
+
+    def load_history_details(self, history_id):
+        try:
+            html = self.db.get_history_content(history_id)
+            self.view.display_history_content(html)
+        except Exception as e:
+            self._log(f"Erro ao carregar detalhe: {e}", "red")
