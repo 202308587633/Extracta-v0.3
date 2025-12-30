@@ -16,9 +16,9 @@ class MainViewModel:
             return
 
         self.view.update_status("Processando...", "yellow")
-        self.view.toggle_button(False) # Desativa botão para evitar duplo clique
+        self.view.toggle_button(False)
+        self.view.display_html_content("Aguarde...")
 
-        # Executa em thread separada para não travar a GUI
         thread = threading.Thread(target=self._run_task, args=(url,))
         thread.start()
 
@@ -27,7 +27,9 @@ class MainViewModel:
             html = self.scraper.fetch_html(url)
             self.db.save_scraping(url, html)
             self.view.update_status("Sucesso! Salvo no Banco de Dados.", "green")
+            self.view.display_html_content(html)
         except Exception as e:
             self.view.update_status(f"Falha: {str(e)}", "red")
+            self.view.display_html_content(f"Erro: {str(e)}")
         finally:
             self.view.toggle_button(True)
