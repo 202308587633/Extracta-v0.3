@@ -49,6 +49,23 @@ class MainViewModel:
         finally:
             self.view.toggle_button(True)
 
+    def scrape_specific_search_url(self, url):
+        self._log(f"Iniciando scrap de link específico: {url}", "yellow")
+        thread = threading.Thread(target=self._run_specific_scraping_task, args=(url,))
+        thread.start()
+
+    def _run_specific_scraping_task(self, url):
+        try:
+            html = self.scraper.fetch_html(url)
+            self.db.save_scraping(url, html)
+            self._log("Link específico salvo no banco.", "green")
+            
+            self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
+            self.view.after_thread_safe(self.load_history_list)
+            
+        except Exception as e:
+            self._log(f"Erro ao raspar link específico: {e}", "red")
+
     def _log(self, message, color="white"):
         try:
             self.db.save_log(message)

@@ -5,6 +5,7 @@ from views.tabs.home_tab import HomeTab
 from views.tabs.log_tab import LogTab
 from views.tabs.history_tab import HistoryTab
 from views.tabs.results_tab import ResultsTab
+from views.tabs.content_tab import ContentTab
 
 class MainView(ctk.CTk):
     def __init__(self):
@@ -42,8 +43,14 @@ class MainView(ctk.CTk):
         )
         self.history_tab.pack(fill="both", expand=True)
 
-        self.results_tab = ResultsTab(parent=self.tabview.add("Resultados"))
+        self.results_tab = ResultsTab(
+            parent=self.tabview.add("Resultados"),
+            on_scrape_callback=self.viewmodel.scrape_specific_search_url
+        )
         self.results_tab.pack(fill="both", expand=True)
+
+        self.content_tab = ContentTab(parent=self.tabview.add("Conteúdo do Buscador"))
+        self.content_tab.pack(fill="both", expand=True)
 
         self.log_tab = LogTab(parent=self.tabview.add("Log"))
         self.log_tab.pack(fill="both", expand=True)
@@ -73,12 +80,16 @@ class MainView(ctk.CTk):
 
     def display_history_content(self, html):
         self.history_tab.display_content(html)
-        
-    def after_thread_safe(self, func):
-        self.after(0, func)
     
     def display_extracted_results(self, data):
         self.results_tab.display_results(data)
 
     def switch_to_results_tab(self):
         self.tabview.set("Resultados")
+    
+    def display_content_in_fourth_tab(self, html):
+        self.content_tab.display_html(html)
+        self.tabview.set("Conteúdo do Buscador")
+        
+    def after_thread_safe(self, func):
+        self.after(0, func)
