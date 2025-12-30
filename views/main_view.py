@@ -11,11 +11,8 @@ class MainView(ctk.CTk):
     def __init__(self):
         super().__init__()
         self._configure_window()
-        
         self.viewmodel = MainViewModel(self)
-        
         self._setup_ui()
-        
         self.viewmodel.load_history_list()
 
     def _configure_window(self):
@@ -28,10 +25,7 @@ class MainView(ctk.CTk):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
 
-        self.home_tab = HomeTab(
-            parent=self.tabview.add("Scraper"), 
-            command_callback=self.viewmodel.start_scraping_command
-        )
+        self.home_tab = HomeTab(parent=self.tabview.add("Scraper"), command_callback=self.viewmodel.start_scraping_command)
         self.home_tab.pack(fill="both", expand=True)
 
         self.history_tab = HistoryTab(
@@ -43,13 +37,15 @@ class MainView(ctk.CTk):
         )
         self.history_tab.pack(fill="both", expand=True)
 
+        # Aba de Resultados com callback para scraping de link
         self.results_tab = ResultsTab(
             parent=self.tabview.add("Resultados"),
             on_scrape_callback=self.viewmodel.scrape_specific_search_url
         )
         self.results_tab.pack(fill="both", expand=True)
 
-        self.content_tab = ContentTab(parent=self.tabview.add("Conteúdo do Buscador"))
+        # 4ª Aba: Conteúdo do Buscador
+        self.content_tab = ContentTab(parent=self.tabview.add("Conteúdo"))
         self.content_tab.pack(fill="both", expand=True)
 
         self.log_tab = LogTab(parent=self.tabview.add("Log"))
@@ -59,13 +55,7 @@ class MainView(ctk.CTk):
         return self.home_tab.get_url()
 
     def update_status(self, message, color_name="white"):
-        colors = {
-            "red": "#FF5555", 
-            "green": "#50FA7B", 
-            "yellow": "#F1FA8C", 
-            "white": "#F8F8F2"
-        }
-        
+        colors = {"red": "#FF5555", "green": "#50FA7B", "yellow": "#F1FA8C", "white": "#F8F8F2"}
         self.home_tab.set_status(message, colors.get(color_name, "white"))
         self.log_tab.append_log(message)
         
@@ -88,8 +78,9 @@ class MainView(ctk.CTk):
         self.tabview.set("Resultados")
     
     def display_content_in_fourth_tab(self, html):
+        """Exibe o HTML na nova aba de Conteúdo e muda o foco"""
         self.content_tab.display_html(html)
-        self.tabview.set("Conteúdo do Buscador")
+        self.tabview.set("Conteúdo")
         
     def after_thread_safe(self, func):
         self.after(0, func)
