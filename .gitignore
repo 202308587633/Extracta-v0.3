@@ -1,0 +1,15 @@
+# Ambiente Virtual
+.venv/
+venv/
+
+# Arquivos compilados
+__pycache__/
+*.pyc
+
+# Banco de Dados (Adicione o nome do seu arquivo aqui)
+db.sqlite3
+*.db
+*.sqlite3
+
+# Arquivos de ambiente (senhas)
+.env
