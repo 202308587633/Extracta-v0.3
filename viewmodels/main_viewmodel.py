@@ -62,7 +62,7 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self.db.delete_history(self.current_history_id)
             self._log(f"Atividade: Item {self.current_history_id} excluído do banco de dados.", "green")
             self.current_history_id = None
-            self.view.self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
+            self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
             self.load_history_list()
         except Exception as e:
             self._log(f"Erro Crítico na exclusão: {e}", "red")
