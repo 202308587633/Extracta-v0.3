@@ -169,18 +169,6 @@ class ResultsTab(ctk.CTkFrame):
         html = self.viewmodel.db.get_extracted_html(values[0], values[1])
         self.viewmodel.view.open_html_from_db_in_browser(html)
 
-    def _view_ppb_internal(self):
-        """Solicita ao ViewModel o carregamento dos dados salvos para as abas"""
-        selected = self.tree.selection()
-        if not selected: return
-        
-        # Obtém Título e Autor da linha selecionada
-        values = self.tree.item(selected[0])['values']
-        title, author = values[0], values[1]
-        
-        # Aciona a lógica de seleção no ViewModel
-        self.viewmodel.handle_result_selection(title, author)
-
     def _on_row_select(self, event):
         """Executado a cada clique em uma linha da tabela"""
         selected = self.tree.selection()
@@ -189,3 +177,20 @@ class ResultsTab(ctk.CTkFrame):
         values = self.tree.item(selected[0])['values']
         # Envia Título e Autor para o ViewModel validar as abas
         self.viewmodel.handle_result_selection(values[0], values[1])
+            
+    def _view_ppb_internal(self):
+        """Solicita ao ViewModel o carregamento e muda o foco para a aba de conteúdo"""
+        selected = self.tree.selection()
+        if not selected: return
+        
+        # Obtém Título e Autor da linha selecionada
+        values = self.tree.item(selected[0])['values']
+        title, author = values[0], values[1]
+        
+        # 1. Aciona a lógica de seleção e carregamento no ViewModel
+        self.viewmodel.handle_result_selection(title, author)
+        
+        # 2. Comando para a MainView mudar o foco para a aba "Conteúdo Buscador"
+        # Somente se a aba foi habilitada (existe HTML no banco)
+        if self.viewmodel.db.get_extracted_html(title, author):
+            self.viewmodel.view.switch_to_content_tab()

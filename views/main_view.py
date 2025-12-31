@@ -150,3 +150,7 @@ class MainView(ctk.CTk):
         except Exception as e:
             print(f"Erro ao mudar estado da aba: {e}")
     
+    def switch_to_content_tab(self):
+        """Muda o foco visual para a aba Conteúdo Buscador"""
+        self.tabview.set("Conteúdo Buscador")
+    
