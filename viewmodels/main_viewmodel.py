@@ -97,48 +97,10 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self.current_history_id = None
             self.load_history_list()
 
-    def initialize_data(self):
-        self.load_history_list()
-        try:
-            saved_data = self.db.get_all_extracted_results()
-            if saved_data:
-                self.view.display_extracted_results(saved_data)
-        except Exception as e:
-            self._log(f"Erro ao carregar dados: {e}", "red")
-
     def scrape_specific_search_url(self, url):
         self._log(f"Iniciando scrap de busca: {url}", "yellow")
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'buscador'))
         thread.start()
-
-    def scrape_repository_url(self, url):
-        self._log(f"Iniciando scrap de repositório: {url}", "yellow")
-        thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
-        thread.start()
-
-    def _run_specific_scraping_task(self, url, doc_type):
-        try:
-            html = self.scraper.fetch_html(url)
-            self.db.save_scraping(url, html, doc_type)
-            if doc_type == 'buscador':
-                self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
-            else:
-                self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Erro no scrap: {e}", "red")
-
-    def open_html_in_browser(self):
-        if not self.current_history_id: return
-        try:
-            html_content = self.db.get_history_content(self.current_history_id)
-            import tempfile, webbrowser
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-            webbrowser.open(f"file://{temp_path}")
-        except Exception as e:
-            self._log(f"Erro ao abrir navegador: {e}", "red")
 
     def extract_data_command(self):
         if not self.current_history_id: return
@@ -153,3 +115,51 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
                 self.view.switch_to_results_tab()
         except Exception as e:
             self._log(f"Erro na extração: {e}", "red")
+
+    def initialize_data(self):
+        """Carrega o histórico e os dados minerados na inicialização"""
+        self.load_history_list()
+        try:
+            saved_data = self.db.get_all_extracted_results()
+            if saved_data:
+                self.view.display_extracted_results(saved_data)
+        except Exception as e:
+            self._log(f"Erro ao carregar dados salvos: {e}", "red")
+
+    def scrape_repository_url(self, url):
+        """Inicia o scrap do link do repositório (PDF/Documento)"""
+        self._log(f"Iniciando scrap do repositório: {url}", "yellow")
+        thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
+        thread.start()
+
+    def _run_specific_scraping_task(self, url, doc_type='buscador'):
+        try:
+            html = self.scraper.fetch_html(url)
+            self.db.save_scraping(url, html, doc_type)
+            self._log(f"HTML do {doc_type} salvo com sucesso.", "green")
+            
+            # Direciona para a aba correta baseado no tipo
+            if doc_type == 'buscador':
+                self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
+            else:
+                self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
+                
+            self.view.after_thread_safe(self.load_history_list)
+        except Exception as e:
+            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
+
+    def open_html_in_browser(self):
+        """Recupera o HTML do banco e abre em uma aba do navegador"""
+        if not self.current_history_id:
+            self._log("Selecione um item do histórico primeiro.", "red")
+            return
+        try:
+            html_content = self.db.get_history_content(self.current_history_id)
+            if not html_content: return
+
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+            webbrowser.open(f"file://{temp_path}")
+        except Exception as e:
+            self._log(f"Erro ao abrir no navegador: {e}", "red")

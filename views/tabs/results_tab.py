@@ -4,14 +4,6 @@ from tkinter import ttk
 import tkinter as tk
 
 class ResultsTab(ctk.CTkFrame):
-    def __init__(self, parent, on_scrape_callback, on_repo_scrape_callback):
-        super().__init__(parent)
-        self.on_scrape_callback = on_scrape_callback
-        self.on_repo_scrape_callback = on_repo_scrape_callback
-        self.link_map = {}
-        self._setup_ui()
-        self._setup_context_menu()
-
     def _setup_ui(self):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
@@ -73,11 +65,6 @@ class ResultsTab(ctk.CTkFrame):
 
         self.tree.bind("<Double-1>", self._on_double_click)
         self.tree.bind("<Button-3>", self._show_context_menu)
-
-    def _setup_context_menu(self):
-        self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
-        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row)
 
     def _show_context_menu(self, event):
         row_id = self.tree.identify_row(event.y)
@@ -150,7 +137,21 @@ class ResultsTab(ctk.CTkFrame):
         if url:
             webbrowser.open(url)
 
+    def __init__(self, parent, on_scrape_callback, on_repo_scrape_callback):
+        super().__init__(parent)
+        self.on_scrape_callback = on_scrape_callback
+        self.on_repo_scrape_callback = on_repo_scrape_callback # Novo argumento
+        self.link_map = {}
+        self._setup_ui()
+        self._setup_context_menu()
+
+    def _setup_context_menu(self):
+        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
+        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row) # Nova opção
+
     def _scrape_repo_row(self):
+        """Dispara o callback para o link do repositório"""
         selected = self.tree.selection()
         if not selected: return
         item_id = selected[0]

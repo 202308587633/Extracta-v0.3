@@ -62,9 +62,15 @@ class MainView(ctk.CTk):
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
 
-        self.home_tab = HomeTab(parent=self.tabview.add("Scraper"), command_callback=self.viewmodel.start_scraping_command)
+        # 1. Aba Principal (Scraper)
+        self.home_tab = HomeTab(
+            parent=self.tabview.add("Scraper"), 
+            command_callback=self.viewmodel.start_scraping_command
+        )
         self.home_tab.pack(fill="both", expand=True)
 
+        # 2. Aba de Histórico
+        # Agora recebe os callbacks para extração e visualização externa (Passo 2)
         self.history_tab = HistoryTab(
             parent=self.tabview.add("Histórico"),
             on_select_callback=self.viewmodel.load_history_details,
@@ -75,6 +81,8 @@ class MainView(ctk.CTk):
         )
         self.history_tab.pack(fill="both", expand=True)
 
+        # 3. Aba de Resultados (Tabela)
+        # Recebe os dois callbacks para raspagem específica (Buscador e Repositório)
         self.results_tab = ResultsTab(
             parent=self.tabview.add("Resultados"),
             on_scrape_callback=self.viewmodel.scrape_specific_search_url,
@@ -82,17 +90,63 @@ class MainView(ctk.CTk):
         )
         self.results_tab.pack(fill="both", expand=True)
 
-        self.content_tab = ContentTab(parent=self.tabview.add("Conteúdo Buscador"))
+        # 4. Aba de Conteúdo do Buscador (HTML da pesquisa)
+        self.content_tab = ContentTab(
+            parent=self.tabview.add("Conteúdo Buscador")
+        )
         self.content_tab.pack(fill="both", expand=True)
 
-        self.repo_tab = RepoTab(parent=self.tabview.add("Conteúdo Repositório"))
+        # 5. Aba de Conteúdo do Repositório (HTML do documento final)
+        # Importante: Certifique-se de que importou a classe RepoTab no topo do arquivo
+        self.repo_tab = RepoTab(
+            parent=self.tabview.add("Conteúdo Repositório")
+        )
         self.repo_tab.pack(fill="both", expand=True)
 
-        self.log_tab = LogTab(parent=self.tabview.add("Log"))
+        # 6. Aba de Logs do Sistema
+        self.log_tab = LogTab(
+            parent=self.tabview.add("Log")
+        )
         self.log_tab.pack(fill="both", expand=True)
-
+        
     def display_repo_content(self, html):
-        self.repo_tab.display_html(html)
-        self.tabview.set("Conteúdo Repositório")
-        
-        
+        """Exibe o HTML na aba de Repositório e muda o foco"""
+        if hasattr(self, 'repo_tab'):
+            self.repo_tab.display_html(html)
+            self.tabview.set("Conteúdo Repositório")
+            self.tabview = ctk.CTkTabview(self)
+            self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
+
+            # Aba Scraper
+            self.home_tab = HomeTab(parent=self.tabview.add("Scraper"), command_callback=self.viewmodel.start_scraping_command)
+            self.home_tab.pack(fill="both", expand=True)
+
+            # Aba Histórico - Passando os 5 callbacks agora necessários
+            self.history_tab = HistoryTab(
+                parent=self.tabview.add("Histórico"),
+                on_select_callback=self.viewmodel.load_history_details,
+                on_delete_callback=self.viewmodel.delete_history_item,
+                on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
+                on_extract_callback=self.viewmodel.extract_data_command,
+                on_browser_callback=self.viewmodel.open_html_in_browser
+            )
+            self.history_tab.pack(fill="both", expand=True)
+
+            # Aba Resultados - Passando os 2 callbacks necessários
+            self.results_tab = ResultsTab(
+                parent=self.tabview.add("Resultados"),
+                on_scrape_callback=self.viewmodel.scrape_specific_search_url,
+                on_repo_scrape_callback=self.viewmodel.scrape_repository_url
+            )
+            self.results_tab.pack(fill="both", expand=True)
+
+            # Abas de Conteúdo
+            self.content_tab = ContentTab(parent=self.tabview.add("Conteúdo Buscador"))
+            self.content_tab.pack(fill="both", expand=True)
+
+            self.repo_tab = RepoTab(parent=self.tabview.add("Conteúdo Repositório"))
+            self.repo_tab.pack(fill="both", expand=True)
+
+            # Aba Log
+            self.log_tab = LogTab(parent=self.tabview.add("Log"))
+            self.log_tab.pack(fill="both", expand=True)
