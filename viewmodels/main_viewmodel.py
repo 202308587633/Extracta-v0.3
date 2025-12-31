@@ -10,10 +10,6 @@ import tempfile
 import webbrowser
 
 class MainViewModel: # Certifique-se de que o nome da classe está correto
-    def _log(self, message, color="white"):
-        self.db.save_log(message)
-        self.view.update_status(message, color)
-        
     def check_pagination_and_scrape(self):
         if not self.current_history_id: return
         try:
@@ -128,22 +124,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
         thread.start()
 
-    def _run_specific_scraping_task(self, url, doc_type='buscador'):
-        try:
-            html = self.scraper.fetch_html(url)
-            self.db.save_scraping(url, html, doc_type)
-            self._log(f"HTML do {doc_type} salvo com sucesso.", "green")
-            
-            # Direciona para a aba correta baseado no tipo
-            if doc_type == 'buscador':
-                self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
-            else:
-                self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
-                
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
-
     def open_html_in_browser(self):
         """Recupera o HTML do banco e abre em uma aba do navegador"""
         if not self.current_history_id:
@@ -190,14 +170,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(f"Erro Crítico ao abrir repositório: {e}", "red")
 
-    def _log(self, message, color="white"):
-        """Atualização de log para todas as atividades executadas"""
-        try:
-            self.db.save_log(message)
-        except:
-            pass
-        self.view.update_status(message, color)
-
     def delete_history_item(self):
         if not self.current_history_id: 
             self._log("Tentativa de exclusão sem seleção.", "yellow")
@@ -234,9 +206,81 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self._log(f"Erro Crítico na extração: {e}", "red")
 
     def _log(self, message, color="white"):
-        """Gravação de log para todas as atividades executadas"""
+        """
+        Centraliza todos os logs: 
+        1. Persiste a mensagem no Banco de Dados
+        2. Atualiza a Barra de Status global na interface
+        3. Registra a atividade na aba de Logs
+        """
         try:
             self.db.save_log(message)
         except:
             pass
         self.view.update_status(message, color)
+
+    def _run_specific_scraping_task(self, url, doc_type='buscador'):
+        """
+        Unifica a tarefa de scraping para diferentes tipos de documentos (Buscador/PLB ou Repositório/PPB)
+        """
+        try:
+            html = self.scraper.fetch_html(url)
+            self.db.save_scraping(url, html, doc_type)
+            self._log(f"Atividade: HTML do {doc_type} salvo com sucesso.", "green")
+            
+            # Direciona o conteúdo para a aba correspondente baseada no doc_type
+            if doc_type == 'buscador':
+                self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
+            else:
+                self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
+                
+            self.view.after_thread_safe(self.load_history_list)
+        except Exception as e:
+            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
+
+    def handle_result_selection(self, title, author):
+        """
+        Gerencia a seleção de uma pesquisa na lista de resultados.
+        Verifica a existência de HTML salvo (PPB e LAP) e atualiza as abas.
+        """
+        # 1. Tenta recuperar o HTML da PPB (Página da Pesquisa)
+        html_ppb = self.db.get_extracted_html(title, author)
+        if html_ppb:
+            self.view.display_content_in_fourth_tab(html_ppb)
+            self.view.set_tab_state("Conteúdo Buscador", "normal")
+            self._log(f"Atividade: PPB de '{title}' carregada do banco.", "green")
+        else:
+            self.view.set_tab_state("Conteúdo Buscador", "disabled")
+            self._log(f"Aviso: PPB de '{title}' não possui HTML salvo.", "yellow")
+
+        # 2. Tenta recuperar o HTML do LAP (Link de Acesso ao PDF / Repositório)
+        html_lap = self.db.get_lap_html(title, author)
+        if html_lap:
+            self.view.display_repo_content(html_lap)
+            self.view.set_tab_state("Conteúdo Repositório", "normal")
+        else:
+            self.view.set_tab_state("Conteúdo Repositório", "disabled")
+
+    def open_ppb_browser_from_db(self, title, author):
+        """
+        Recupera o HTML da PPB do banco de dados e abre-o no navegador.
+        Garante a integridade dos dados visualizados (conforme capturados).
+        """
+        self._log(f"Iniciando visualização da PPB no navegador: {title}", "yellow")
+        
+        try:
+            html_content = self.db.get_extracted_html(title, author)
+            
+            if not html_content:
+                self._log("Erro: Não existe código HTML salvo para esta PPB.", "red")
+                return
+
+            import tempfile, webbrowser
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+
+            webbrowser.open(f"file://{temp_path}")
+            self._log(f"Sucesso: PPB aberta via ficheiro temporário: {temp_path}", "green")
+
+        except Exception as e:
+            self._log(f"Erro ao abrir PPB do banco no navegador: {e}", "red")

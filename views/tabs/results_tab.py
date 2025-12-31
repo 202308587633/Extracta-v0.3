@@ -134,10 +134,11 @@ class ResultsTab(ctk.CTkFrame):
         if url:
             webbrowser.open(url)
 
-    def __init__(self, parent, on_scrape_callback, on_repo_scrape_callback):
+    def __init__(self, parent, viewmodel, on_scrape_callback, on_repo_scrape_callback):
         super().__init__(parent)
+        self.viewmodel = viewmodel  # Armazena a referência para o viewmodel
         self.on_scrape_callback = on_scrape_callback
-        self.on_repo_scrape_callback = on_repo_scrape_callback # Novo argumento
+        self.on_repo_scrape_callback = on_repo_scrape_callback
         self.link_map = {}
         self._setup_ui()
         self._setup_context_menu()
@@ -146,6 +147,10 @@ class ResultsTab(ctk.CTkFrame):
         self.context_menu = tk.Menu(self, tearoff=0)
         self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
         self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row) # Nova opção
+        self.context_menu.add_separator()        
+        self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
+        self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
+        self.context_menu.add_separator()
 
     def _scrape_repo_row(self):
         """Dispara o callback para o link do repositório"""
@@ -155,3 +160,17 @@ class ResultsTab(ctk.CTkFrame):
         links = self.link_map.get(item_id)
         if links and links.get('repo'):
             self.on_repo_scrape_callback(links['repo'])
+
+    def _view_ppb_internal(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        # Solicita ao ViewModel o HTML do banco usando Título e Autor
+        self.viewmodel.handle_result_selection(values[0], values[1])
+
+    def _view_ppb_browser(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        html = self.viewmodel.db.get_extracted_html(values[0], values[1])
+        self.viewmodel.view.open_html_from_db_in_browser(html)

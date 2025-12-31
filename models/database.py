@@ -100,3 +100,17 @@ class DatabaseModel:
             cursor = conn.cursor()
             cursor.execute("SELECT title, author, ppb_link, lap_link FROM extracted_results ORDER BY extracted_at DESC")
             return [{'title': r[0], 'author': r[1], 'ppb_link': r[2], 'lap_link': r[3]} for r in cursor.fetchall()]
+
+    def get_extracted_html(self, title, author):
+        """Recupera o HTML salvo de uma pesquisa específica (PPB)"""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            # Busca no histórico o HTML que corresponde à URL da PPB salva nos resultados
+            cursor.execute("""
+                SELECT h.html_content 
+                FROM history h
+                JOIN extracted_results e ON h.url = e.ppb_link
+                WHERE e.title = ? AND e.author = ?
+            """, (title, author))
+            result = cursor.fetchone()
+            return result[0] if result else None

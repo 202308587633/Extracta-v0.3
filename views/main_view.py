@@ -46,14 +46,31 @@ class MainView(ctk.CTk):
         self.tabview.set("Resultados")
     
     def display_content_in_fourth_tab(self, html):
-        """Exibe o HTML na nova aba de Conteúdo e muda o foco"""
+        """Exibe o HTML na aba de Conteúdo Buscador e muda o foco"""
         self.content_tab.display_html(html)
-        self.tabview.set("Conteúdo")
-        
+        # Altere de "Conteúdo" para "Conteúdo Buscador" para coincidir com o _setup_ui
+        self.tabview.set("Conteúdo Buscador")
+                
     def after_thread_safe(self, func):
         self.after(0, func)
 
+    def update_status(self, message, color_name="white"):
+        """Atualiza o status global visível em todas as abas no rodapé"""
+        colors = {"red": "#FF5555", "green": "#50FA7B", "yellow": "#F1FA8C", "white": "#F8F8F2"}
+        # Atualiza o label fixo no rodapé criado em _setup_ui
+        self.label_status.configure(text=message, text_color=colors.get(color_name, "white"))
+        # Mantém o registro histórico na aba de Logs
+        self.log_tab.append_log(message)
+
+    def display_repo_content(self, html):
+        """Exibe o HTML na aba de Repositório e muda o foco sem recriar a interface"""
+        if hasattr(self, 'repo_tab'):
+            self.repo_tab.display_html(html)
+            self.tabview.set("Conteúdo Repositório")
+            # O código posterior que recriava o tabview foi removido para evitar instabilidade
+
     def _setup_ui(self):
+        """Configura a interface principal uma única vez"""
         self.tabview = ctk.CTkTabview(self)
         self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
 
@@ -65,7 +82,6 @@ class MainView(ctk.CTk):
         self.home_tab.pack(fill="both", expand=True)
 
         # 2. Aba de Histórico
-        # Agora recebe os callbacks para extração e visualização externa (Passo 2)
         self.history_tab = HistoryTab(
             parent=self.tabview.add("Histórico"),
             on_select_callback=self.viewmodel.load_history_details,
@@ -77,22 +93,22 @@ class MainView(ctk.CTk):
         self.history_tab.pack(fill="both", expand=True)
 
         # 3. Aba de Resultados (Tabela)
-        # Recebe os dois callbacks para raspagem específica (Buscador e Repositório)
         self.results_tab = ResultsTab(
             parent=self.tabview.add("Resultados"),
+            viewmodel=self.viewmodel,  # Passa o viewmodel aqui
             on_scrape_callback=self.viewmodel.scrape_specific_search_url,
             on_repo_scrape_callback=self.viewmodel.scrape_repository_url
         )
         self.results_tab.pack(fill="both", expand=True)
 
-        # 4. Aba de Conteúdo do Buscador (HTML da pesquisa)
+        # 4. Aba de Conteúdo do Buscador
         self.content_tab = ContentTab(
-            parent=self.tabview.add("Conteúdo Buscador")
+            parent=self.tabview.add("Conteúdo Buscador"),
+            on_browser_callback=self.viewmodel.open_html_in_browser # Permite abrir o HTML atual no navegador
         )
         self.content_tab.pack(fill="both", expand=True)
 
-        # Aba de Conteúdo do Repositório (HTML do documento final)
-        # Agora passa o callback para abrir no navegador
+        # 5. Aba de Conteúdo do Repositório
         self.repo_tab = RepoTab(
             parent=self.tabview.add("Conteúdo Repositório"),
             on_browser_callback=self.viewmodel.open_repo_html_in_browser
@@ -105,68 +121,29 @@ class MainView(ctk.CTk):
         )
         self.log_tab.pack(fill="both", expand=True)
         
-        # Container para o Status Global (Fica fora das abas)
-        self.status_container = ctk.CTkFrame(self, height=30, corner_radius=0, fg_color="transparent")
+        # Container de Status Fixo no Rodapé (Garante visibilidade global)
+        self.status_container = ctk.CTkFrame(self, height=30, corner_radius=0)
         self.status_container.pack(side="bottom", fill="x", padx=20, pady=(0, 10))
-
-        self.label_status = ctk.CTkLabel(
-            self.status_container, 
-            text="Sistema Pronto", 
-            font=("Roboto", 12, "bold"),
-            anchor="w"
-        )
+        
+        self.label_status = ctk.CTkLabel(self.status_container, text="Pronto", font=("Roboto", 12))
         self.label_status.pack(side="left", padx=10)
+
+    def set_tab_state(self, tab_name, state):
+        """Habilita ou desabilita abas dinamicamente"""
+        self.tabview._tab_dict[tab_name].configure(state=state)
+
+    def open_html_from_db_in_browser(self, html_content):
+        """Abre o código HTML passado (vindo do banco) no navegador"""
+        if not html_content:
+            self.update_status("Erro: Sem código HTML salvo para esta pesquisa.", "red")
+            return
         
-    def display_repo_content(self, html):
-        """Exibe o HTML na aba de Repositório e muda o foco"""
-        if hasattr(self, 'repo_tab'):
-            self.repo_tab.display_html(html)
-            self.tabview.set("Conteúdo Repositório")
-            self.tabview = ctk.CTkTabview(self)
-            self.tabview.pack(padx=20, pady=20, fill="both", expand=True)
+        import tempfile, webbrowser
+        with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+            f.write(html_content)
+            temp_path = f.name
+        webbrowser.open(f"file://{temp_path}")
 
-            # Aba Scraper
-            self.home_tab = HomeTab(parent=self.tabview.add("Scraper"), command_callback=self.viewmodel.start_scraping_command)
-            self.home_tab.pack(fill="both", expand=True)
+############################
 
-            # Aba Histórico - Passando os 5 callbacks agora necessários
-            self.history_tab = HistoryTab(
-                parent=self.tabview.add("Histórico"),
-                on_select_callback=self.viewmodel.load_history_details,
-                on_delete_callback=self.viewmodel.delete_history_item,
-                on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
-                on_extract_callback=self.viewmodel.extract_data_command,
-                on_browser_callback=self.viewmodel.open_html_in_browser
-            )
-            self.history_tab.pack(fill="both", expand=True)
-
-            # Aba Resultados - Passando os 2 callbacks necessários
-            self.results_tab = ResultsTab(
-                parent=self.tabview.add("Resultados"),
-                on_scrape_callback=self.viewmodel.scrape_specific_search_url,
-                on_repo_scrape_callback=self.viewmodel.scrape_repository_url
-            )
-            self.results_tab.pack(fill="both", expand=True)
-
-            # Abas de Conteúdo
-            self.content_tab = ContentTab(parent=self.tabview.add("Conteúdo Buscador"))
-            self.content_tab.pack(fill="both", expand=True)
-
-            self.repo_tab = RepoTab(parent=self.tabview.add("Conteúdo Repositório"))
-            self.repo_tab.pack(fill="both", expand=True)
-
-            # Aba Log
-            self.log_tab = LogTab(parent=self.tabview.add("Log"))
-            self.log_tab.pack(fill="both", expand=True)
-
-    def update_status(self, message, color_name="white"):
-        """Atualiza o status global visível em todas as abas"""
-        colors = {"red": "#FF5555", "green": "#50FA7B", "yellow": "#F1FA8C", "white": "#F8F8F2"}
-        selected_color = colors.get(color_name, "#F8F8F2")
-        
-        # Atualiza o label global na MainView
-        self.label_status.configure(text=message, text_color=selected_color)
-        
-        # Mantém o registro no LogTab
-        if hasattr(self, 'log_tab'):
-            self.log_tab.append_log(message)
+# No método _setup_ui da MainView
