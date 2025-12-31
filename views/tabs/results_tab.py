@@ -144,16 +144,6 @@ class ResultsTab(ctk.CTkFrame):
         self._setup_ui()
         self._setup_context_menu()
 
-    def _setup_context_menu(self):
-        self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
-        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row) # Nova opção
-        self.context_menu.add_separator()        
-        self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
-        self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
-
     def _scrape_repo_row(self):
         """Dispara o callback para o link do repositório"""
         selected = self.tree.selection()
@@ -203,3 +193,30 @@ class ResultsTab(ctk.CTkFrame):
             self.viewmodel.view.tabview.set("Conteúdo PPR")
         except ValueError:
             self.viewmodel._log("Erro: Aba 'Conteúdo PPR' não encontrada.", "red")
+
+    def _setup_context_menu(self):
+        """Configura o menu de contexto da tabela de resultados"""
+        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
+        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row)
+        self.context_menu.add_separator()        
+        self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
+        self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
+        self.context_menu.add_command(label="🌍 Abrir PPR no Navegador", command=self._view_ppr_browser)
+
+    def _view_ppr_browser(self):
+        """Recupera o HTML da PPR do banco e abre no navegador"""
+        selected = self.tree.selection()
+        if not selected: return
+        
+        # Obtém os valores da linha selecionada (Título e Autor)
+        values = self.tree.item(selected[0])['values']
+        title, author = values[0], values[1]
+        
+        # Define a pesquisa selecionada no ViewModel para garantir a sincronia
+        self.viewmodel.handle_result_selection(title, author)
+        
+        # Chama a função unificada no ViewModel para abrir a PPR
+        self.viewmodel.open_ppr_in_browser()

@@ -191,21 +191,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(str(e), "red")
 
-    def _open_html_string_in_browser(self, html_content):
-        """Método utilitário privado para abrir strings HTML no navegador."""
-        if not html_content:
-            self._log("Erro: O conteúdo HTML está vazio ou não foi capturado.", "red")
-            return
-        try:
-            import tempfile, webbrowser
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-            webbrowser.open(f"file://{temp_path}")
-            self._log("Conteúdo aberto com sucesso no navegador.", "green")
-        except Exception as e:
-            self._log(f"Erro ao gerar visualização temporária: {e}", "red")
-
     def open_plb_in_browser(self):
         """Abre a PLB (Página de Listagem) no navegador."""
         if not self.current_history_id:
@@ -217,16 +202,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
     def open_ppb_browser_from_db(self, title, author):
         """Abre a PPB (Página de Pesquisa) no navegador."""
         html = self.db.get_extracted_html(title, author)
-        self._open_html_string_in_browser(html)
-
-    def open_ppr_in_browser(self):
-        """Abre a PPR (Página do Repositório) no navegador."""
-        if not hasattr(self, 'selected_research'):
-            self._log("Selecione uma pesquisa na tabela de resultados.", "yellow")
-            return
-        title = self.selected_research["title"]
-        author = self.selected_research["author"]
-        html = self.db.get_ppr_html(title, author)
         self._open_html_string_in_browser(html)
 
     def _run_task(self, url):
@@ -273,4 +248,31 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         
         # FORÇA a atualização do conteúdo caso o usuário já esteja visualizando a aba
         self.on_tab_changed()
+
+    def _open_html_string_in_browser(self, html_content):
+        """Método utilitário para abrir strings HTML no navegador."""
+        if not html_content:
+            self._log("Erro: Conteúdo HTML não disponível.", "red")
+            return
+        try:
+            import tempfile, webbrowser
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+            webbrowser.open(f"file://{temp_path}")
+            self._log("PPR aberta no navegador com sucesso.", "green")
+        except Exception as e:
+            self._log(f"Erro ao abrir navegador: {e}", "red")
+
+    def open_ppr_in_browser(self):
+        """Recupera a PPR do banco e exibe no navegador."""
+        if not hasattr(self, 'selected_research'):
+            self._log("Selecione uma pesquisa nos resultados.", "yellow")
+            return
         
+        title = self.selected_research["title"]
+        author = self.selected_research["author"]
+        
+        # Recupera o HTML da tabela ppr
+        html = self.db.get_ppr_html(title, author)
+        self._open_html_string_in_browser(html)

@@ -9,15 +9,16 @@ class RepoTab(ctk.CTkFrame):
         self._setup_context_menu()
 
     def _setup_ui(self):
-        self.textbox_content = ctk.CTkTextbox(self, corner_radius=10, font=("Consolas", 12))
-        self.textbox_content.pack(fill="both", expand=True, padx=10, pady=10)
+        # Aprimoramento visual: adicionando padding e bordas arredondadas
+        self.textbox_content = ctk.CTkTextbox(self, corner_radius=10, font=("Consolas", 12), border_width=2)
+        self.textbox_content.pack(fill="both", expand=True, padx=15, pady=15)
         self.textbox_content.configure(state="disabled")
 
     def _setup_context_menu(self):
-        """Menu de contexto para exibir no navegador"""
-        self.context_menu = tk.Menu(self, tearoff=0)
+        """Menu de contexto aprimorado para a PPR"""
+        self.context_menu = tk.Menu(self, tearoff=0, bg="#2b2b2b", fg="white", activebackground="#1f538d")
         self.context_menu.add_command(
-            label="🌐 Abrir Repositório no Navegador", 
+            label="🌐 Abrir PPR no Navegador", 
             command=self.on_browser_callback
         )
         self.textbox_content.bind("<Button-3>", self._show_context_menu)

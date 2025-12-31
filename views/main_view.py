@@ -84,8 +84,8 @@ class MainView(ctk.CTk):
         # 5. Aba de Conteúdo PPR (Página de Produção do Repositório)
         # Verifique se o nome aqui é exatamente "Conteúdo PPR"
         self.repo_tab = RepoTab(
-            parent=self.tabview.add("Conteúdo PPR"), # Verifique se está exatamente assim
-            on_browser_callback=self.viewmodel.open_ppr_in_browser
+            parent=self.tabview.add("Conteúdo PPR"),
+            on_browser_callback=self.viewmodel.open_ppr_in_browser # Callback unificado
         )
         self.repo_tab.pack(fill="both", expand=True)
 
@@ -158,7 +158,3 @@ class MainView(ctk.CTk):
             self.tabview.set("Conteúdo PPB") # O nome deve ser IDÊNTICO ao add()
         except ValueError:
             print("Erro: Aba 'Conteúdo PPB' não encontrada. Verifique o nome no _setup_ui.")
-
-#####
-
-# No método _setup_ui da MainView
