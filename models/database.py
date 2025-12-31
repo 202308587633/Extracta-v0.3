@@ -66,13 +66,6 @@ class DatabaseModel:
             """)
             conn.commit()
 
-    def save_plb(self, url, html_content):
-        """Grava as páginas de listagem na tabela plb."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO plb (url, html_content) VALUES (?, ?)", (url, html_content))
-            conn.commit()
-
     def save_ppb_content(self, url, html_content):
         """Grava o HTML da PPB relacionado à linha correspondente em pesquisas."""
         with sqlite3.connect(self.db_name) as conn:
@@ -93,22 +86,12 @@ class DatabaseModel:
             cursor.execute("INSERT INTO logs (message) VALUES (?)", (message,))
             conn.commit()
 
-    # --- MÉTODOS DE RECUPERAÇÃO ---
-
     def get_plb_list(self):
         """Recupera a lista de PLBs."""
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, url, created_at FROM plb ORDER BY created_at DESC")
             return cursor.fetchall()
-
-    def get_plb_content(self, plb_id):
-        """Recupera o HTML de uma PLB específica."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT html_content FROM plb WHERE id = ?", (plb_id,))
-            result = cursor.fetchone()
-            return result[0] if result else ""
 
     def get_extracted_html(self, title, author):
         """Recupera o HTML da PPB via relação com pesquisas."""
@@ -129,13 +112,6 @@ class DatabaseModel:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM plb WHERE id = ?", (plb_id,))
             conn.commit()
-
-    def get_history_item(self, plb_id):
-        """Mantém compatibilidade para extração de dados."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT url, html_content FROM plb WHERE id = ?", (plb_id,))
-            return cursor.fetchone()
 
     def save_pesquisas(self, data_list):
         with sqlite3.connect(self.db_name) as conn:
@@ -184,11 +160,31 @@ class DatabaseModel:
         """Recupera o HTML da tabela 'ppr' através da relação com a tabela 'pesquisas'"""
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
+            # A query já utiliza a tabela ppr e ppr_link
             cursor.execute("""
                 SELECT r.html_content 
                 FROM ppr r
-                JOIN pesquisas p ON r.pesquisa_id = p.id
+                JOIN pesquisas p ON r.select_id = p.id
                 WHERE p.title = ? AND p.author = ?
             """, (title, author))
             result = cursor.fetchone()
             return result[0] if result else None
+
+    def save_plb(self, url, html_content):
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO plb (url, html_content) VALUES (?, ?)", (url, html_content))
+                conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro de Banco de Dados (PLB): {e}")
+
+    def get_plb_content(self, plb_id):
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT url, html_content FROM plb WHERE id = ?", (plb_id,))
+                result = cursor.fetchone()
+                return result if result else (None, None)
+        except sqlite3.Error as e:
+            raise Exception(f"Erro ao ler dados da PLB: {e}")

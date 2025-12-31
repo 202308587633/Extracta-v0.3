@@ -75,14 +75,14 @@ class MainView(ctk.CTk):
 
         # 4. Aba de Conteúdo do Buscador
         self.content_tab = ContentTab(
-            parent=self.tabview.add("Conteúdo Buscador"),
+            parent=self.tabview.add("Conteúdo PPB"),
             on_browser_callback=self.viewmodel.open_ppb_browser_from_db
         )
         self.content_tab.pack(fill="both", expand=True)
 
         # 5. Aba de Conteúdo do Repositório
         self.repo_tab = RepoTab(
-            parent=self.tabview.add("Conteúdo Repositório"),
+            parent=self.tabview.add("Conteúdo PPR"),
             on_browser_callback=self.viewmodel.open_repo_in_browser 
         )
         self.repo_tab.pack(fill="both", expand=True)

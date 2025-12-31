@@ -206,5 +206,6 @@ class ResultsTab(ctk.CTkFrame):
         
         self.viewmodel.handle_result_selection(title, author)
         
+        # Verifica usando o novo nome do método
         if self.viewmodel.db.get_ppr_html(title, author):
-            self.viewmodel.view.tabview.set("Conteúdo Repositório")
+            self.viewmodel.view.tabview.set("Conteúdo PPR")

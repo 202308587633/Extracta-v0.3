@@ -13,8 +13,12 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
     def check_pagination_and_scrape(self):
         if not self.current_history_id: return
         try:
-            result = self.db.get_history_item(self.current_history_id)
-            if not result: return
+            # Substituído: get_history_item -> get_plb_content
+            original_url, html = self.db.get_plb_content(self.current_history_id)
+            if not html: return
+            
+            page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
+
             original_url, html = result
             page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
             if not page_numbers:
@@ -78,31 +82,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             pass
         self.view.update_status(message, color)
 
-    def open_ppb_browser_from_db(self, title, author):
-        """
-        Recupera o HTML da PPB do banco de dados e abre-o no navegador.
-        Garante a integridade dos dados visualizados (conforme capturados).
-        """
-        self._log(f"Iniciando visualização da PPB no navegador: {title}", "yellow")
-        
-        try:
-            html_content = self.db.get_extracted_html(title, author)
-            
-            if not html_content:
-                self._log("Erro: Não existe código HTML salvo para esta PPB.", "red")
-                return
-
-            import tempfile, webbrowser
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-
-            webbrowser.open(f"file://{temp_path}")
-            self._log(f"Sucesso: PPB aberta via ficheiro temporário: {temp_path}", "green")
-
-        except Exception as e:
-            self._log(f"Erro ao abrir PPB do banco no navegador: {e}", "red")
-
     def _run_pagination_task(self, base_url, max_page):
         """Executa o DeepScrap de PLBs: percorre e salva todas as páginas de listagem na tabela 'plb'"""
         try:
@@ -128,118 +107,13 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(f"Erro Crítico no DeepScrap de PLBs: {e}", "red")
 
-    def load_history_list(self):
-        """Atualizado para carregar da nova tabela 'plb'"""
-        # Busca id, url e data da tabela plb em vez de history
-        items = self.db.get_plb_list() 
-        self.view.update_history_list(items)
-
-    def initialize_data(self):
-        """Carrega o histórico de PLBs e os dados minerados (tabela pesquisas) na inicialização"""
-        self.load_history_list()
-        try:
-            # Atualizado para chamar o método que consulta a tabela 'pesquisas'
-            saved_data = self.db.get_all_pesquisas() 
-            if saved_data:
-                self.view.display_extracted_results(saved_data)
-        except Exception as e:
-            self._log(f"Erro ao carregar dados salvos: {e}", "red")
-            
-    def extract_data_command(self):
-        """Extrai dados da PLB e salva na tabela 'pesquisas'"""
-        if not self.current_history_id: 
-            self._log("Selecione uma PLB no histórico para extrair dados.", "yellow")
-            return
-        try:
-            result = self.db.get_history_item(self.current_history_id)
-            url, html = result[0], result[1]
-            self._log(f"Atividade: Iniciando DeepScrap na PLB: {url}", "yellow")
-            
-            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
-            
-            if data:
-                # Atualizado para a nova tabela 'pesquisas'
-                self.db.save_pesquisas(data) 
-                self._log(f"Atividade: {len(data)} pesquisas mineradas e salvas com sucesso.", "green")
-                
-                # Recupera os dados atualizados da tabela 'pesquisas'
-                all_results = self.db.get_all_pesquisas()
-                self.view.display_extracted_results(all_results)
-                self.view.switch_to_results_tab()
-            else:
-                self._log("Aviso: Nenhum dado científico encontrado nesta PLB.", "red")
-        except Exception as e:
-            self._log(f"Erro Crítico na extração: {e}", "red")
-
-    def open_plb_in_browser(self):
-        """Recupera o HTML da PLB selecionada no histórico e abre no navegador"""
-        if not self.current_history_id:
-            self._log("Selecione um item do histórico primeiro.", "red")
-            return
-            
-        try:
-            # Busca o conteúdo da nova tabela 'plb'
-            html_content = self.db.get_plb_content(self.current_history_id)
-            if not html_content: return
-
-            import tempfile, webbrowser
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-            webbrowser.open(f"file://{temp_path}")
-        except Exception as e:
-            self._log(f"Erro ao abrir PLB no navegador: {e}", "red")
-            
-    def open_repo_in_browser(self):
-        """Recupera o HTML do repositório (LAP) e abre no navegador"""
-        if not hasattr(self, 'selected_research'):
-            self._log("Selecione uma pesquisa na tabela de resultados primeiro.", "red")
-            return
-
-        try:
-            title = self.selected_research["title"]
-            author = self.selected_research["author"]
-            
-            # Busca o HTML do LAP usando a lógica relacional
-            html_content = self.db.get_lap_html(title, author)
-            
-            if not html_content:
-                self._log("Erro: Nenhum código HTML de repositório encontrado.", "red")
-                return
-
-            import tempfile, webbrowser
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-            webbrowser.open(f"file://{temp_path}")
-        except Exception as e:
-            self._log(f"Erro ao abrir repositório no navegador: {e}", "red")
-
-    def _run_task(self, url):
-        """Executa o scrap inicial e salva na tabela 'plb'"""
-        try:
-            html = self.scraper.fetch_html(url)
-            # Atualizado para a nova tabela 'plb'
-            self.db.save_plb(url, html)
-            
-            # CORREÇÃO: Acessa diretamente o método display_html da home_tab na View
-            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
-            
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Falha: {e}", "red")
-        finally:
-            self.view.toggle_button(True)
-
     def load_history_details(self, history_id):
-            """Busca conteúdo da tabela 'plb' e exibe na interface"""
-            self.current_history_id = history_id
-            # Busca o HTML da tabela plb pelo ID selecionado
-            html = self.db.get_plb_content(history_id) 
-            
-            # CORREÇÃO: Acessa diretamente a history_tab para exibir o conteúdo
-            # Substitui a chamada inexistente self.view.display_history_content(html)
-            self.view.after_thread_safe(lambda: self.view.history_tab.display_content(html))
+        """Busca conteúdo da tabela 'plb' e exibe na interface."""
+        self.current_history_id = history_id
+        # Agora o método retorna uma tupla, pegamos apenas o HTML (índice 1) para exibição
+        _, html = self.db.get_plb_content(history_id) 
+        
+        self.view.after_thread_safe(lambda: self.view.history_tab.display_content(html))    
 
     def _run_specific_scraping_task(self, url, doc_type='buscador'):
         """Versão corrigida para gravar PPB na tabela ppb e PPR na tabela ppr"""
@@ -293,3 +167,108 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             html = self.db.get_ppr_html(title, author)
             if html:
                 self.view.repo_tab.display_html(html)
+
+    def load_history_list(self):
+        """Carrega da tabela 'plb' e atualiza a lista diretamente na aba"""
+        items = self.db.get_plb_list() 
+        # Acesso direto ao método update_list da history_tab
+        self.view.after_thread_safe(lambda: self.view.history_tab.update_list(items))
+
+    def initialize_data(self):
+        """Carrega PLBs e pesquisas mineradas na inicialização"""
+        self.load_history_list()
+        try:
+            saved_data = self.db.get_all_pesquisas() 
+            if saved_data:
+                # Acesso direto à results_tab
+                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
+        except Exception as e:
+            self._log(f"Erro ao carregar dados salvos: {e}", "red")
+
+    def _open_html_string_in_browser(self, html_content):
+        """Método utilitário privado para abrir qualquer string HTML no navegador."""
+        if not html_content:
+            self._log("Erro: O conteúdo HTML está vazio.", "red")
+            return
+
+        try:
+            import tempfile, webbrowser
+            # Cria um arquivo temporário que persiste após o fechamento do objeto f
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+            
+            # Abre o arquivo no navegador padrão
+            webbrowser.open(f"file://{temp_path}")
+            self._log(f"Sucesso: Conteúdo aberto no navegador.", "green")
+        except Exception as e:
+            self._log(f"Erro Crítico ao processar HTML temporário: {e}", "red")
+
+    def open_ppb_browser_from_db(self, title, author):
+        """Recupera a PPB do banco e usa o utilitário para abrir."""
+        self._log(f"Visualizando PPB no navegador: {title}", "yellow")
+        html = self.db.get_extracted_html(title, author)
+        self._open_html_string_in_browser(html)
+        
+    def open_ppr_in_browser(self):
+        """Recupera a PPR do banco e usa o utilitário para abrir."""
+        if not hasattr(self, 'selected_research'):
+            self._log("Selecione uma pesquisa primeiro.", "red")
+            return
+
+        title = self.selected_research["title"]
+        author = self.selected_research["author"]
+        
+        self._log(f"Visualizando PPR no navegador: {title}", "yellow")
+        html = self.db.get_ppr_html(title, author) # Usa o método unificado PPR
+        self._open_html_string_in_browser(html)
+
+    def open_plb_in_browser(self):
+        """Recupera a PLB do histórico e usa o utilitário para abrir."""
+        if not self.current_history_id:
+            self._log("Selecione um item do histórico primeiro.", "red")
+            return
+            
+        self._log("Visualizando PLB (Histórico) no navegador...", "yellow")
+        html = self.db.get_plb_content(self.current_history_id)
+        self._open_html_string_in_browser(html)
+
+    def _run_task(self, url):
+        """Executa o scrap inicial e trata erros de rede ou banco"""
+        try:
+            html = self.scraper.fetch_html(url) # Captura erros de rede específicos
+            self.db.save_plb(url, html)        # Captura erros de banco específicos
+            
+            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
+            self.view.after_thread_safe(self.load_history_list)
+            self._log("Página capturada com sucesso.", "green")
+        except Exception as e:
+            # Exibe a mensagem precisa (ex: "Erro: Falha na ligação") na barra de status
+            self._log(str(e), "red")
+        finally:
+            self.view.toggle_button(True)
+
+    def extract_data_command(self):
+        """Extrai dados tratando possíveis falhas no banco ou no parser"""
+        if not self.current_history_id: 
+            self._log("Selecione uma PLB no histórico primeiro.", "yellow")
+            return
+        try:
+            url, html = self.db.get_plb_content(self.current_history_id)
+            if not html: 
+                raise Exception("Aviso: Conteúdo da PLB está vazio ou indisponível.")
+
+            self._log(f"Minerando dados em: {url}", "yellow")
+            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
+            
+            if data:
+                self.db.save_pesquisas(data) 
+                self._log(f"Sucesso: {len(data)} pesquisas salvas.", "green")
+                
+                all_results = self.db.get_all_pesquisas()
+                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(all_results))
+                self.view.switch_to_results_tab()
+            else:
+                self._log("Nenhum dado científico encontrado.", "red")
+        except Exception as e:
+            self._log(str(e), "red")
