@@ -21,14 +21,8 @@ class MainView(ctk.CTk):
     def toggle_button(self, state):
         self.home_tab.set_button_state(state)
 
-    def display_html_content(self, html_content):
-        self.home_tab.display_html(html_content)
-
     def update_history_list(self, items):
         self.history_tab.update_list(items)
-
-    def display_history_content(self, html):
-        self.history_tab.display_content(html)
 
     def display_extracted_results(self, data):
         self.results_tab.display_results(data)
@@ -46,13 +40,6 @@ class MainView(ctk.CTk):
         self.label_status.configure(text=message, text_color=colors.get(color_name, "white"))
         # Mantém o registro histórico na aba de Logs
         self.log_tab.append_log(message)
-
-    def display_repo_content(self, html):
-        """Exibe o HTML na aba de Repositório e muda o foco sem recriar a interface"""
-        if hasattr(self, 'repo_tab'):
-            self.repo_tab.display_html(html)
-            self.tabview.set("Conteúdo Repositório")
-            # O código posterior que recriava o tabview foi removido para evitar instabilidade
 
     def _setup_ui(self):
         """Configura a interface principal uma única vez"""
@@ -131,12 +118,6 @@ class MainView(ctk.CTk):
             f.write(html_content)
             temp_path = f.name
         webbrowser.open(f"file://{temp_path}")
-
-    def display_content_in_fourth_tab(self, html):
-        """Exibe o HTML na aba de Conteúdo Buscador e muda o foco"""
-        self.content_tab.display_html(html)
-        # Correção: O nome deve ser exatamente "Conteúdo Buscador"
-        self.tabview.set("Conteúdo Buscador")
 
     def get_current_tab(self):
         """Retorna o nome da aba selecionada atualmente"""

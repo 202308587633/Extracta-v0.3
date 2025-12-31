@@ -28,18 +28,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(f"Erro na paginação: {e}", "red")
 
-    def _run_repo_scraping_task(self, url):
-        try:
-            html = self.scraper.fetch_html(url)
-            self.db.save_scraping(url, html, doc_type='repositorio')
-            self._log("HTML do repositório salvo com sucesso.", "green")
-            
-            # Atualiza a 5ª aba e a lista de histórico
-            self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Erro ao raspar repositório: {e}", "red")
-
     def __init__(self, view):
         self.view = view
         self.db = DatabaseModel(db_name=config.DB_NAME)
@@ -63,52 +51,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         self._log(f"Iniciando scrap do repositório: {url}", "yellow")
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
         thread.start()
-
-    def open_html_in_browser(self):
-        """Recupera o HTML do banco e abre em uma aba do navegador"""
-        if not self.current_history_id:
-            self._log("Selecione um item do histórico primeiro.", "red")
-            return
-        try:
-            html_content = self.db.get_history_content(self.current_history_id)
-            if not html_content: return
-
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-            webbrowser.open(f"file://{temp_path}")
-        except Exception as e:
-            self._log(f"Erro ao abrir no navegador: {e}", "red")
-           
-    def open_repo_html_in_browser(self):
-        """Recupera o HTML do repositório do banco e abre no navegador"""
-        self._log("Iniciando abertura do HTML do repositório no navegador...", "yellow")
-        
-        if not self.current_history_id:
-            self._log("Erro: Nenhum item selecionado no histórico.", "red")
-            return
-
-        try:
-            # Recupera o conteúdo HTML do banco de dados
-            html_content = self.db.get_history_content(self.current_history_id)
-            
-            if not html_content:
-                self._log("Erro: Conteúdo HTML do repositório está vazio.", "red")
-                return
-
-            # Log de atividade de banco de dados
-            self._log(f"Atividade: HTML recuperado para o ID {self.current_history_id}.", "green")
-
-            import tempfile, webbrowser
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-
-            webbrowser.open(f"file://{temp_path}")
-            self._log(f"Sucesso: Repositório aberto via arquivo temporário: {temp_path}", "green")
-
-        except Exception as e:
-            self._log(f"Erro Crítico ao abrir repositório: {e}", "red")
 
     def delete_history_item(self):
         if not self.current_history_id: 
@@ -199,26 +141,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         finally:
             self.view.toggle_button(True)
 
-    def _run_specific_scraping_task(self, url, doc_type='buscador'):
-        """Unifica o scrap e salva PPBs ou LAPs relacionando-os corretamente"""
-        try:
-            html = self.scraper.fetch_html(url)
-            
-            if doc_type == 'buscador':
-                # Salva o código HTML na tabela 'ppb' vinculada à pesquisa
-                self.db.save_ppb_content(url, html)
-                self._log(f"Atividade: HTML da PPB salvo com sucesso.", "green")
-                self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
-            else:
-                # Se for repositório, mantém salvamento genérico (ou ajuste conforme nova tabela se existir)
-                self.db.save_plb(url, html) 
-                self._log(f"Atividade: HTML do repositório salvo em histórico.", "green")
-                self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
-                
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
-            
     def load_history_list(self):
         """Atualizado para carregar da nova tabela 'plb'"""
         # Busca id, url e data da tabela plb em vez de history
@@ -308,3 +230,22 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             html = self.db.get_lap_html(title, author)
             if html:
                 self.view.repo_tab.display_html(html)
+
+    def _run_specific_scraping_task(self, url, doc_type='buscador'):
+        """Versão refatorada e limpa da tarefa de scraping específico"""
+        try:
+            html = self.scraper.fetch_html(url)
+            
+            if doc_type == 'buscador':
+                # Salva na tabela 'ppb' vinculando-a à pesquisa correspondente
+                self.db.save_ppb_content(url, html)
+                self._log(f"PPB capturada e vinculada com sucesso.", "green")
+                # O conteúdo será exibido via on_tab_changed se a aba for selecionada
+            else:
+                # Salva o LAP (repositório) na tabela plb ou equivalente
+                self.db.save_plb(url, html)
+                self._log(f"Conteúdo do repositório salvo.", "green")
+                
+            self.view.after_thread_safe(self.load_history_list)
+        except Exception as e:
+            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
