@@ -21,7 +21,7 @@ class VufindParser:
 
             # Link de Acesso ao PDF (LAP)
             repo_tag = item.select_one('.link a.fulltext')
-            data['lap_link'] = repo_tag.get('href', '') if repo_tag else ""
+            data['ppr_link'] = repo_tag.get('href', '') if repo_tag else "" 
 
             results.append(data)
         return results

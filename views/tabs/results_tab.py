@@ -101,7 +101,7 @@ class ResultsTab(ctk.CTkFrame):
 
             self.link_map[item_id] = {
                 'search': item.get('ppb_link'),
-                'repo': item.get('lap_link')
+                'repo': item.get('ppr_link') # Alterado aqui
             }
 
     def _sort_column(self, col, reverse):
@@ -152,6 +152,7 @@ class ResultsTab(ctk.CTkFrame):
         self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
         self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
         self.context_menu.add_separator()
+        self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
 
     def _scrape_repo_row(self):
         """Dispara o callback para o link do repositório"""
@@ -194,3 +195,16 @@ class ResultsTab(ctk.CTkFrame):
         # Somente se a aba foi habilitada (existe HTML no banco)
         if self.viewmodel.db.get_extracted_html(title, author):
             self.viewmodel.view.switch_to_content_tab()
+
+    def _view_ppr_internal(self):
+        """Solicita o carregamento da PPR e muda o foco da aba"""
+        selected = self.tree.selection()
+        if not selected: return
+        
+        values = self.tree.item(selected[0])['values']
+        title, author = values[0], values[1]
+        
+        self.viewmodel.handle_result_selection(title, author)
+        
+        if self.viewmodel.db.get_ppr_html(title, author):
+            self.viewmodel.view.tabview.set("Conteúdo Repositório")
