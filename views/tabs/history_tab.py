@@ -7,8 +7,8 @@ class HistoryTab(ctk.CTkFrame):
         self.on_select_callback = on_select_callback
         self.on_delete_callback = on_delete_callback
         self.on_pagination_callback = on_pagination_callback
-        self.on_extract_callback = on_extract_callback
-        self.on_browser_callback = on_browser_callback # Novo callback para o navegador
+        self.on_extract_callback = on_extract_callback # Adicionado
+        self.on_browser_callback = on_browser_callback # Adicionado
         self._setup_ui()
         self._setup_context_menu()
 
@@ -54,11 +54,10 @@ class HistoryTab(ctk.CTkFrame):
         self.context_menu.add_command(label="Excluir este HTML", command=self.on_delete_callback)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="🔍 Buscar Paginação e Raspar", command=self.on_pagination_callback)
-        self.context_menu.add_command(label="📋 Extrair Dados da Pesquisa (Nova Aba)", command=self.on_extract_callback)
-        self.context_menu.add_command(label="🌐 Abrir Conteúdo no Navegador", command=self.on_browser_callback) # Nova Opção
-        
+        self.context_menu.add_command(label="📋 Extrair Dados", command=self.on_extract_callback) # Novo
+        self.context_menu.add_command(label="🌐 Abrir no Navegador", command=self.on_browser_callback) # Novo
         self.textbox_content.bind("<Button-3>", self._show_context_menu)
-
+        
     def _show_context_menu(self, event):
         try:
             self.context_menu.tk_popup(event.x_root, event.y_root)

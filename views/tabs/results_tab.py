@@ -4,9 +4,10 @@ from tkinter import ttk
 import tkinter as tk
 
 class ResultsTab(ctk.CTkFrame):
-    def __init__(self, parent, on_scrape_callback):
+    def __init__(self, parent, on_scrape_callback, on_repo_scrape_callback):
         super().__init__(parent)
         self.on_scrape_callback = on_scrape_callback
+        self.on_repo_scrape_callback = on_repo_scrape_callback
         self.link_map = {}
         self._setup_ui()
         self._setup_context_menu()
@@ -75,7 +76,8 @@ class ResultsTab(ctk.CTkFrame):
 
     def _setup_context_menu(self):
         self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="🕷️ Fazer Scrap deste Link de Busca", command=self._scrape_selected_row)
+        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
+        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row)
 
     def _show_context_menu(self, event):
         row_id = self.tree.identify_row(event.y)
@@ -147,3 +149,11 @@ class ResultsTab(ctk.CTkFrame):
     def _open_url(self, url):
         if url:
             webbrowser.open(url)
+
+    def _scrape_repo_row(self):
+        selected = self.tree.selection()
+        if not selected: return
+        item_id = selected[0]
+        links = self.link_map.get(item_id)
+        if links and links.get('repo'):
+            self.on_repo_scrape_callback(links['repo'])
