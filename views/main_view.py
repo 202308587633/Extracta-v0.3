@@ -27,11 +27,6 @@ class MainView(ctk.CTk):
     def get_url_input(self):
         return self.home_tab.get_url()
 
-    def update_status(self, message, color_name="white"):
-        colors = {"red": "#FF5555", "green": "#50FA7B", "yellow": "#F1FA8C", "white": "#F8F8F2"}
-        self.home_tab.set_status(message, colors.get(color_name, "white"))
-        self.log_tab.append_log(message)
-
     def toggle_button(self, state):
         self.home_tab.set_button_state(state)
 
@@ -110,6 +105,18 @@ class MainView(ctk.CTk):
         )
         self.log_tab.pack(fill="both", expand=True)
         
+        # Container para o Status Global (Fica fora das abas)
+        self.status_container = ctk.CTkFrame(self, height=30, corner_radius=0, fg_color="transparent")
+        self.status_container.pack(side="bottom", fill="x", padx=20, pady=(0, 10))
+
+        self.label_status = ctk.CTkLabel(
+            self.status_container, 
+            text="Sistema Pronto", 
+            font=("Roboto", 12, "bold"),
+            anchor="w"
+        )
+        self.label_status.pack(side="left", padx=10)
+        
     def display_repo_content(self, html):
         """Exibe o HTML na aba de Repositório e muda o foco"""
         if hasattr(self, 'repo_tab'):
@@ -151,3 +158,15 @@ class MainView(ctk.CTk):
             # Aba Log
             self.log_tab = LogTab(parent=self.tabview.add("Log"))
             self.log_tab.pack(fill="both", expand=True)
+
+    def update_status(self, message, color_name="white"):
+        """Atualiza o status global visível em todas as abas"""
+        colors = {"red": "#FF5555", "green": "#50FA7B", "yellow": "#F1FA8C", "white": "#F8F8F2"}
+        selected_color = colors.get(color_name, "#F8F8F2")
+        
+        # Atualiza o label global na MainView
+        self.label_status.configure(text=message, text_color=selected_color)
+        
+        # Mantém o registro no LogTab
+        if hasattr(self, 'log_tab'):
+            self.log_tab.append_log(message)
