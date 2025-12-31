@@ -60,7 +60,7 @@ class MainView(ctk.CTk):
             on_delete_callback=self.viewmodel.delete_history_item,
             on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
             on_extract_callback=self.viewmodel.extract_data_command,
-            on_browser_callback=self.viewmodel.open_html_in_browser
+            on_browser_callback=self.viewmodel.open_plb_in_browser 
         )
         self.history_tab.pack(fill="both", expand=True)
 
@@ -83,7 +83,7 @@ class MainView(ctk.CTk):
         # 5. Aba de Conteúdo do Repositório
         self.repo_tab = RepoTab(
             parent=self.tabview.add("Conteúdo Repositório"),
-            on_browser_callback=self.viewmodel.open_repo_html_in_browser
+            on_browser_callback=self.viewmodel.open_repo_in_browser 
         )
         self.repo_tab.pack(fill="both", expand=True)
 

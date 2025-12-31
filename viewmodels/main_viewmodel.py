@@ -249,3 +249,47 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self.view.after_thread_safe(self.load_history_list)
         except Exception as e:
             self._log(f"Erro ao raspar {doc_type}: {e}", "red")
+
+    def open_plb_in_browser(self):
+        """Recupera o HTML da PLB selecionada no histórico e abre no navegador"""
+        if not self.current_history_id:
+            self._log("Selecione um item do histórico primeiro.", "red")
+            return
+            
+        try:
+            # Busca o conteúdo da nova tabela 'plb'
+            html_content = self.db.get_plb_content(self.current_history_id)
+            if not html_content: return
+
+            import tempfile, webbrowser
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+            webbrowser.open(f"file://{temp_path}")
+        except Exception as e:
+            self._log(f"Erro ao abrir PLB no navegador: {e}", "red")
+            
+    def open_repo_in_browser(self):
+        """Recupera o HTML do repositório (LAP) e abre no navegador"""
+        if not hasattr(self, 'selected_research'):
+            self._log("Selecione uma pesquisa na tabela de resultados primeiro.", "red")
+            return
+
+        try:
+            title = self.selected_research["title"]
+            author = self.selected_research["author"]
+            
+            # Busca o HTML do LAP usando a lógica relacional
+            html_content = self.db.get_lap_html(title, author)
+            
+            if not html_content:
+                self._log("Erro: Nenhum código HTML de repositório encontrado.", "red")
+                return
+
+            import tempfile, webbrowser
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+            webbrowser.open(f"file://{temp_path}")
+        except Exception as e:
+            self._log(f"Erro ao abrir repositório no navegador: {e}", "red")
