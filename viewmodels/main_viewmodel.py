@@ -33,18 +33,34 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self._log(f"Erro na paginação: {e}", "red")
 
     def _run_pagination_task(self, base_url, max_page):
+        """Executa o DeepScrap de PLBs: percorre e salva todas as páginas de listagem"""
         try:
+            self._log(f"Iniciando DeepScrap de PLBs: total de {max_page} páginas.", "yellow")
+            
+            # O separador depende se a URL já tem parâmetros (?) ou não
             separator = "&" if "?" in base_url else "?"
+            
             for i in range(2, max_page + 1):
-                current_url = re.sub(r'page=\d+', f'page={i}', base_url) if "page=" in base_url else f"{base_url}{separator}page={i}"
-                self._log(f"Capturando Página {i}/{max_page}...", "yellow")
+                # Constrói a URL da próxima PLB (ajustar conforme o buscador, ex: &page=i)
+                if "page=" in base_url:
+                    current_url = re.sub(r'page=\d+', f'page={i}', base_url)
+                else:
+                    current_url = f"{base_url}{separator}page={i}"
+                
+                self._log(f"Atividade: Capturando PLB {i} de {max_page}...", "yellow")
+                
+                # Faz o download e salva no banco como tipo 'PLB'
                 html = self.scraper.fetch_html(current_url)
-                self.db.save_scraping(current_url, html)
-                time.sleep(1)
-            self._log("Ciclo de paginação concluído.", "green")
+                self.db.save_scraping(current_url, html, doc_type='PLB')
+                
+                # Pausa técnica para evitar bloqueio pelo servidor (polidez do bot)
+                time.sleep(1.5)
+                
+            self._log(f"Sucesso: DeepScrap concluído. {max_page} PLBs armazenadas.", "green")
             self.view.after_thread_safe(self.load_history_list)
+            
         except Exception as e:
-            self._log(f"Erro no loop: {e}", "red")
+            self._log(f"Erro Crítico no DeepScrap de PLBs: {e}", "red")            
 
     def _run_repo_scraping_task(self, url):
         try:
@@ -91,30 +107,10 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         html = self.db.get_history_content(history_id)
         self.view.display_history_content(html)
 
-    def delete_history_item(self):
-        if self.current_history_id:
-            self.db.delete_history(self.current_history_id)
-            self.current_history_id = None
-            self.load_history_list()
-
     def scrape_specific_search_url(self, url):
         self._log(f"Iniciando scrap de busca: {url}", "yellow")
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'buscador'))
         thread.start()
-
-    def extract_data_command(self):
-        if not self.current_history_id: return
-        try:
-            from models.parsers.vufind_parser import VufindParser
-            result = self.db.get_history_item(self.current_history_id)
-            url, html = result[0], result[1]
-            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
-            if data:
-                self.db.save_extracted_results(data)
-                self.view.display_extracted_results(self.db.get_all_extracted_results())
-                self.view.switch_to_results_tab()
-        except Exception as e:
-            self._log(f"Erro na extração: {e}", "red")
 
     def initialize_data(self):
         """Carrega o histórico e os dados minerados na inicialização"""
@@ -163,3 +159,84 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             webbrowser.open(f"file://{temp_path}")
         except Exception as e:
             self._log(f"Erro ao abrir no navegador: {e}", "red")
+           
+    def open_repo_html_in_browser(self):
+        """Recupera o HTML do repositório do banco e abre no navegador"""
+        self._log("Iniciando abertura do HTML do repositório no navegador...", "yellow")
+        
+        if not self.current_history_id:
+            self._log("Erro: Nenhum item selecionado no histórico.", "red")
+            return
+
+        try:
+            # Recupera o conteúdo HTML do banco de dados
+            html_content = self.db.get_history_content(self.current_history_id)
+            
+            if not html_content:
+                self._log("Erro: Conteúdo HTML do repositório está vazio.", "red")
+                return
+
+            # Log de atividade de banco de dados
+            self._log(f"Atividade: HTML recuperado para o ID {self.current_history_id}.", "green")
+
+            import tempfile, webbrowser
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+
+            webbrowser.open(f"file://{temp_path}")
+            self._log(f"Sucesso: Repositório aberto via arquivo temporário: {temp_path}", "green")
+
+        except Exception as e:
+            self._log(f"Erro Crítico ao abrir repositório: {e}", "red")
+
+    def _log(self, message, color="white"):
+        """Atualização de log para todas as atividades executadas"""
+        try:
+            self.db.save_log(message)
+        except:
+            pass
+        self.view.update_status(message, color)
+
+    def delete_history_item(self):
+        if not self.current_history_id: 
+            self._log("Tentativa de exclusão sem seleção.", "yellow")
+            return
+        try:
+            self.db.delete_history(self.current_history_id)
+            self._log(f"Atividade: Item {self.current_history_id} excluído do banco de dados.", "green")
+            self.current_history_id = None
+            self.view.display_history_content("")
+            self.load_history_list()
+        except Exception as e:
+            self._log(f"Erro Crítico na exclusão: {e}", "red")
+
+    def extract_data_command(self):
+        """Executa a mineração de PPBs e LAPs a partir de uma PLB selecionada"""
+        if not self.current_history_id: 
+            self._log("Selecione uma PLB no histórico para extrair dados.", "yellow")
+            return
+        try:
+            result = self.db.get_history_item(self.current_history_id)
+            url, html = result[0], result[1]
+            self._log(f"Atividade: Iniciando DeepScrap na PLB: {url}", "yellow")
+            
+            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
+            
+            if data:
+                self.db.save_extracted_results(data)
+                self._log(f"Atividade: {len(data)} pesquisas mineradas e salvas com sucesso.", "green")
+                self.view.display_extracted_results(self.db.get_all_extracted_results())
+                self.view.switch_to_results_tab()
+            else:
+                self._log("Aviso: Nenhum dado científico encontrado nesta PLB.", "red")
+        except Exception as e:
+            self._log(f"Erro Crítico na extração: {e}", "red")
+
+    def _log(self, message, color="white"):
+        """Gravação de log para todas as atividades executadas"""
+        try:
+            self.db.save_log(message)
+        except:
+            pass
+        self.view.update_status(message, color)

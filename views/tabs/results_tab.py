@@ -44,18 +44,18 @@ class ResultsTab(ctk.CTkFrame):
         style.map("Treeview.Heading",
                   background=[('active', '#343638')])
 
-        columns = ("title", "author", "search", "repo")
+        columns = ("title", "author", "ppb", "lap")
         self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="browse")
 
-        self.tree.heading("title", text="Título da Pesquisa", command=lambda: self._sort_column("title", False))
-        self.tree.heading("author", text="Autor", command=lambda: self._sort_column("author", False))
-        self.tree.heading("search", text="Link Busca", command=lambda: self._sort_column("search", False))
-        self.tree.heading("repo", text="Documento", command=lambda: self._sort_column("repo", False))
+        self.tree.heading("title", text="Nome da Pesquisa")
+        self.tree.heading("author", text="Autor")
+        self.tree.heading("ppb", text="Link PPB")
+        self.tree.heading("lap", text="Link LAP")
 
         self.tree.column("title", width=400, minwidth=150, anchor="w")
         self.tree.column("author", width=200, minwidth=100, anchor="w")
-        self.tree.column("search", width=100, minwidth=80, anchor="center")
-        self.tree.column("repo", width=100, minwidth=80, anchor="center")
+        self.tree.column("ppb", width=120, anchor="center")
+        self.tree.column("lap", width=120, anchor="center")
 
         self.scrollbar = ctk.CTkScrollbar(self.container, command=self.tree.yview)
         self.tree.configure(yscrollcommand=self.scrollbar.set)
@@ -95,15 +95,12 @@ class ResultsTab(ctk.CTkFrame):
         self.label_count.configure(text=f"{len(results)} registros encontrados (Duplo clique para abrir links)")
 
         for item in results:
-            search_txt = "Abrir Link" if item.get('search_link') else "-"
-            repo_txt = "Abrir PDF" if item.get('repo_link') else "-"
-
-            values = (item.get('title'), item.get('author'), search_txt, repo_txt)
+            values = (item.get('title'), item.get('author'), "Abrir PPB", "Abrir LAP")
             item_id = self.tree.insert("", "end", values=values)
 
             self.link_map[item_id] = {
-                'search': item.get('search_link'),
-                'repo': item.get('repo_link')
+                'search': item.get('ppb_link'),
+                'repo': item.get('lap_link')
             }
 
     def _sort_column(self, col, reverse):

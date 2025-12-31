@@ -32,20 +32,6 @@ class DatabaseModel:
             cursor.execute("SELECT url, html_content FROM history WHERE id = ?", (history_id,))
             return cursor.fetchone()
 
-    def save_extracted_results(self, data_list):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            for item in data_list:
-                cursor.execute("INSERT INTO extracted_results (title, author, search_link, repo_link) VALUES (?, ?, ?, ?)",
-                             (item.get('title'), item.get('author'), item.get('search_link'), item.get('repo_link')))
-            conn.commit()
-
-    def get_all_extracted_results(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT title, author, search_link, repo_link FROM extracted_results ORDER BY extracted_at DESC")
-            return [{'title': r[0], 'author': r[1], 'search_link': r[2], 'repo_link': r[3]} for r in cursor.fetchall()]
-
     def __init__(self, db_name="database.db"):
         self.db_name = db_name
         self._init_db()
@@ -62,7 +48,7 @@ class DatabaseModel:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     url TEXT NOT NULL,
                     html_content TEXT,
-                    type TEXT DEFAULT 'buscador',
+                    type TEXT DEFAULT 'PLB',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -71,13 +57,13 @@ class DatabaseModel:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS extracted_results (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    author TEXT,
-                    search_link TEXT,
-                    repo_link TEXT,
+                    title TEXT,        -- Nome da Pesquisa
+                    author TEXT,       -- Autor
+                    ppb_link TEXT,     -- Link da Página da Pesquisa (PPB)
+                    lap_link TEXT,     -- Link de Acesso ao PDF (LAP) - ATUALIZADO
                     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """)            
             
             # Tabela de Logs
             cursor.execute("""
@@ -98,3 +84,19 @@ class DatabaseModel:
                 (url, html_content, doc_type)
             )
             conn.commit()
+
+    def save_extracted_results(self, data_list):
+        with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
+            cursor = conn.cursor()
+            for item in data_list:
+                cursor.execute("""
+                    INSERT INTO extracted_results (title, author, ppb_link, lap_link)
+                    VALUES (?, ?, ?, ?)
+                """, (item.get('title'), item.get('author'), item.get('ppb_link'), item.get('lap_link')))
+            conn.commit()
+
+    def get_all_extracted_results(self):
+        with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT title, author, ppb_link, lap_link FROM extracted_results ORDER BY extracted_at DESC")
+            return [{'title': r[0], 'author': r[1], 'ppb_link': r[2], 'lap_link': r[3]} for r in cursor.fetchall()]

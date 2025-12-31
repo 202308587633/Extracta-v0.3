@@ -96,10 +96,11 @@ class MainView(ctk.CTk):
         )
         self.content_tab.pack(fill="both", expand=True)
 
-        # 5. Aba de Conteúdo do Repositório (HTML do documento final)
-        # Importante: Certifique-se de que importou a classe RepoTab no topo do arquivo
+        # Aba de Conteúdo do Repositório (HTML do documento final)
+        # Agora passa o callback para abrir no navegador
         self.repo_tab = RepoTab(
-            parent=self.tabview.add("Conteúdo Repositório")
+            parent=self.tabview.add("Conteúdo Repositório"),
+            on_browser_callback=self.viewmodel.open_repo_html_in_browser
         )
         self.repo_tab.pack(fill="both", expand=True)
 
