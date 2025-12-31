@@ -65,6 +65,7 @@ class ResultsTab(ctk.CTkFrame):
 
         self.tree.bind("<Double-1>", self._on_double_click)
         self.tree.bind("<Button-3>", self._show_context_menu)
+        self.tree.bind("<<TreeviewSelect>>", self._on_row_select) # Vincula a seleção de linha
 
     def _show_context_menu(self, event):
         row_id = self.tree.identify_row(event.y)
@@ -161,16 +162,30 @@ class ResultsTab(ctk.CTkFrame):
         if links and links.get('repo'):
             self.on_repo_scrape_callback(links['repo'])
 
-    def _view_ppb_internal(self):
-        selected = self.tree.selection()
-        if not selected: return
-        values = self.tree.item(selected[0])['values']
-        # Solicita ao ViewModel o HTML do banco usando Título e Autor
-        self.viewmodel.handle_result_selection(values[0], values[1])
-
     def _view_ppb_browser(self):
         selected = self.tree.selection()
         if not selected: return
         values = self.tree.item(selected[0])['values']
         html = self.viewmodel.db.get_extracted_html(values[0], values[1])
         self.viewmodel.view.open_html_from_db_in_browser(html)
+
+    def _view_ppb_internal(self):
+        """Solicita ao ViewModel o carregamento dos dados salvos para as abas"""
+        selected = self.tree.selection()
+        if not selected: return
+        
+        # Obtém Título e Autor da linha selecionada
+        values = self.tree.item(selected[0])['values']
+        title, author = values[0], values[1]
+        
+        # Aciona a lógica de seleção no ViewModel
+        self.viewmodel.handle_result_selection(title, author)
+
+    def _on_row_select(self, event):
+        """Executado a cada clique em uma linha da tabela"""
+        selected = self.tree.selection()
+        if not selected: return
+        
+        values = self.tree.item(selected[0])['values']
+        # Envia Título e Autor para o ViewModel validar as abas
+        self.viewmodel.handle_result_selection(values[0], values[1])

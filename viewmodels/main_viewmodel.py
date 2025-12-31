@@ -28,36 +28,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(f"Erro na paginação: {e}", "red")
 
-    def _run_pagination_task(self, base_url, max_page):
-        """Executa o DeepScrap de PLBs: percorre e salva todas as páginas de listagem"""
-        try:
-            self._log(f"Iniciando DeepScrap de PLBs: total de {max_page} páginas.", "yellow")
-            
-            # O separador depende se a URL já tem parâmetros (?) ou não
-            separator = "&" if "?" in base_url else "?"
-            
-            for i in range(2, max_page + 1):
-                # Constrói a URL da próxima PLB (ajustar conforme o buscador, ex: &page=i)
-                if "page=" in base_url:
-                    current_url = re.sub(r'page=\d+', f'page={i}', base_url)
-                else:
-                    current_url = f"{base_url}{separator}page={i}"
-                
-                self._log(f"Atividade: Capturando PLB {i} de {max_page}...", "yellow")
-                
-                # Faz o download e salva no banco como tipo 'PLB'
-                html = self.scraper.fetch_html(current_url)
-                self.db.save_scraping(current_url, html, doc_type='PLB')
-                
-                # Pausa técnica para evitar bloqueio pelo servidor (polidez do bot)
-                time.sleep(1.5)
-                
-            self._log(f"Sucesso: DeepScrap concluído. {max_page} PLBs armazenadas.", "green")
-            self.view.after_thread_safe(self.load_history_list)
-            
-        except Exception as e:
-            self._log(f"Erro Crítico no DeepScrap de PLBs: {e}", "red")            
-
     def _run_repo_scraping_task(self, url):
         try:
             html = self.scraper.fetch_html(url)
@@ -83,40 +53,10 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         thread = threading.Thread(target=self._run_task, args=(url,))
         thread.start()
 
-    def _run_task(self, url):
-        try:
-            html = self.scraper.fetch_html(url)
-            self.db.save_scraping(url, html)
-            self.view.display_html_content(html)
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Falha: {e}", "red")
-        finally:
-            self.view.toggle_button(True)
-
-    def load_history_list(self):
-        items = self.db.get_history_list()
-        self.view.update_history_list(items)
-
-    def load_history_details(self, history_id):
-        self.current_history_id = history_id
-        html = self.db.get_history_content(history_id)
-        self.view.display_history_content(html)
-
     def scrape_specific_search_url(self, url):
         self._log(f"Iniciando scrap de busca: {url}", "yellow")
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'buscador'))
         thread.start()
-
-    def initialize_data(self):
-        """Carrega o histórico e os dados minerados na inicialização"""
-        self.load_history_list()
-        try:
-            saved_data = self.db.get_all_extracted_results()
-            if saved_data:
-                self.view.display_extracted_results(saved_data)
-        except Exception as e:
-            self._log(f"Erro ao carregar dados salvos: {e}", "red")
 
     def scrape_repository_url(self, url):
         """Inicia o scrap do link do repositório (PDF/Documento)"""
@@ -183,28 +123,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(f"Erro Crítico na exclusão: {e}", "red")
 
-    def extract_data_command(self):
-        """Executa a mineração de PPBs e LAPs a partir de uma PLB selecionada"""
-        if not self.current_history_id: 
-            self._log("Selecione uma PLB no histórico para extrair dados.", "yellow")
-            return
-        try:
-            result = self.db.get_history_item(self.current_history_id)
-            url, html = result[0], result[1]
-            self._log(f"Atividade: Iniciando DeepScrap na PLB: {url}", "yellow")
-            
-            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
-            
-            if data:
-                self.db.save_extracted_results(data)
-                self._log(f"Atividade: {len(data)} pesquisas mineradas e salvas com sucesso.", "green")
-                self.view.display_extracted_results(self.db.get_all_extracted_results())
-                self.view.switch_to_results_tab()
-            else:
-                self._log("Aviso: Nenhum dado científico encontrado nesta PLB.", "red")
-        except Exception as e:
-            self._log(f"Erro Crítico na extração: {e}", "red")
-
     def _log(self, message, color="white"):
         """
         Centraliza todos os logs: 
@@ -217,48 +135,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except:
             pass
         self.view.update_status(message, color)
-
-    def _run_specific_scraping_task(self, url, doc_type='buscador'):
-        """
-        Unifica a tarefa de scraping para diferentes tipos de documentos (Buscador/PLB ou Repositório/PPB)
-        """
-        try:
-            html = self.scraper.fetch_html(url)
-            self.db.save_scraping(url, html, doc_type)
-            self._log(f"Atividade: HTML do {doc_type} salvo com sucesso.", "green")
-            
-            # Direciona o conteúdo para a aba correspondente baseada no doc_type
-            if doc_type == 'buscador':
-                self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
-            else:
-                self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
-                
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
-
-    def handle_result_selection(self, title, author):
-        """
-        Gerencia a seleção de uma pesquisa na lista de resultados.
-        Verifica a existência de HTML salvo (PPB e LAP) e atualiza as abas.
-        """
-        # 1. Tenta recuperar o HTML da PPB (Página da Pesquisa)
-        html_ppb = self.db.get_extracted_html(title, author)
-        if html_ppb:
-            self.view.display_content_in_fourth_tab(html_ppb)
-            self.view.set_tab_state("Conteúdo Buscador", "normal")
-            self._log(f"Atividade: PPB de '{title}' carregada do banco.", "green")
-        else:
-            self.view.set_tab_state("Conteúdo Buscador", "disabled")
-            self._log(f"Aviso: PPB de '{title}' não possui HTML salvo.", "yellow")
-
-        # 2. Tenta recuperar o HTML do LAP (Link de Acesso ao PDF / Repositório)
-        html_lap = self.db.get_lap_html(title, author)
-        if html_lap:
-            self.view.display_repo_content(html_lap)
-            self.view.set_tab_state("Conteúdo Repositório", "normal")
-        else:
-            self.view.set_tab_state("Conteúdo Repositório", "disabled")
 
     def open_ppb_browser_from_db(self, title, author):
         """
@@ -284,3 +160,151 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
 
         except Exception as e:
             self._log(f"Erro ao abrir PPB do banco no navegador: {e}", "red")
+
+    def _run_pagination_task(self, base_url, max_page):
+        """Executa o DeepScrap de PLBs: percorre e salva todas as páginas de listagem na tabela 'plb'"""
+        try:
+            self._log(f"Iniciando DeepScrap de PLBs: total de {max_page} páginas.", "yellow")
+            separator = "&" if "?" in base_url else "?"
+            
+            for i in range(2, max_page + 1):
+                if "page=" in base_url:
+                    current_url = re.sub(r'page=\d+', f'page={i}', base_url)
+                else:
+                    current_url = f"{base_url}{separator}page={i}"
+                
+                self._log(f"Atividade: Capturando PLB {i} de {max_page}...", "yellow")
+                
+                html = self.scraper.fetch_html(current_url)
+                # Atualizado para usar a nova tabela 'plb'
+                self.db.save_plb(current_url, html)
+                
+                time.sleep(1.5)
+                
+            self._log(f"Sucesso: DeepScrap concluído. {max_page} PLBs armazenadas.", "green")
+            self.view.after_thread_safe(self.load_history_list)
+        except Exception as e:
+            self._log(f"Erro Crítico no DeepScrap de PLBs: {e}", "red")
+
+    def _run_task(self, url):
+        """Executa o scrap inicial e salva na tabela 'plb'"""
+        try:
+            html = self.scraper.fetch_html(url)
+            # Atualizado para a nova tabela 'plb'
+            self.db.save_plb(url, html)
+            self.view.display_html_content(html)
+            self.view.after_thread_safe(self.load_history_list)
+        except Exception as e:
+            self._log(f"Falha: {e}", "red")
+        finally:
+            self.view.toggle_button(True)
+
+    def _run_specific_scraping_task(self, url, doc_type='buscador'):
+        """Unifica o scrap e salva PPBs ou LAPs relacionando-os corretamente"""
+        try:
+            html = self.scraper.fetch_html(url)
+            
+            if doc_type == 'buscador':
+                # Salva o código HTML na tabela 'ppb' vinculada à pesquisa
+                self.db.save_ppb_content(url, html)
+                self._log(f"Atividade: HTML da PPB salvo com sucesso.", "green")
+                self.view.after_thread_safe(lambda: self.view.display_content_in_fourth_tab(html))
+            else:
+                # Se for repositório, mantém salvamento genérico (ou ajuste conforme nova tabela se existir)
+                self.db.save_plb(url, html) 
+                self._log(f"Atividade: HTML do repositório salvo em histórico.", "green")
+                self.view.after_thread_safe(lambda: self.view.display_repo_content(html))
+                
+            self.view.after_thread_safe(self.load_history_list)
+        except Exception as e:
+            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
+            
+    def load_history_list(self):
+        """Atualizado para carregar da nova tabela 'plb'"""
+        # Busca id, url e data da tabela plb em vez de history
+        items = self.db.get_plb_list() 
+        self.view.update_history_list(items)
+
+    def load_history_details(self, history_id):
+        """Atualizado para buscar conteúdo da nova tabela 'plb'"""
+        self.current_history_id = history_id
+        # Busca o HTML da tabela plb pelo ID selecionado
+        html = self.db.get_plb_content(history_id) 
+        self.view.display_history_content(html)
+    
+    def initialize_data(self):
+        """Carrega o histórico de PLBs e os dados minerados (tabela pesquisas) na inicialização"""
+        self.load_history_list()
+        try:
+            # Atualizado para chamar o método que consulta a tabela 'pesquisas'
+            saved_data = self.db.get_all_pesquisas() 
+            if saved_data:
+                self.view.display_extracted_results(saved_data)
+        except Exception as e:
+            self._log(f"Erro ao carregar dados salvos: {e}", "red")
+            
+    def extract_data_command(self):
+        """Extrai dados da PLB e salva na tabela 'pesquisas'"""
+        if not self.current_history_id: 
+            self._log("Selecione uma PLB no histórico para extrair dados.", "yellow")
+            return
+        try:
+            result = self.db.get_history_item(self.current_history_id)
+            url, html = result[0], result[1]
+            self._log(f"Atividade: Iniciando DeepScrap na PLB: {url}", "yellow")
+            
+            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
+            
+            if data:
+                # Atualizado para a nova tabela 'pesquisas'
+                self.db.save_pesquisas(data) 
+                self._log(f"Atividade: {len(data)} pesquisas mineradas e salvas com sucesso.", "green")
+                
+                # Recupera os dados atualizados da tabela 'pesquisas'
+                all_results = self.db.get_all_pesquisas()
+                self.view.display_extracted_results(all_results)
+                self.view.switch_to_results_tab()
+            else:
+                self._log("Aviso: Nenhum dado científico encontrado nesta PLB.", "red")
+        except Exception as e:
+            self._log(f"Erro Crítico na extração: {e}", "red")
+
+    def handle_result_selection(self, title, author):
+        """
+        Executada a cada seleção de linha. 
+        Apenas habilita ou desabilita as abas conforme o banco de dados.
+        """
+        # Guarda a referência da pesquisa selecionada atualmente
+        self.selected_research = {"title": title, "author": author}
+        
+        # Verifica existência de dados nas novas tabelas 'ppb' e 'plb' (para LAP)
+        html_ppb = self.db.get_extracted_html(title, author)
+        html_lap = self.db.get_lap_html(title, author)
+
+        # Atualiza o estado das abas na interface
+        self.view.set_tab_state("Conteúdo Buscador", "normal" if html_ppb else "disabled")
+        self.view.set_tab_state("Conteúdo Repositório", "normal" if html_lap else "disabled")
+        
+        # Se o usuário já estiver na aba de conteúdo, força a atualização imediata
+        self.on_tab_changed()
+
+    def on_tab_changed(self):
+        """
+        Atualiza o conteúdo da aba selecionada para refletir a pesquisa atual.
+        """
+        if not hasattr(self, 'selected_research'): return
+
+        current_tab = self.view.tabview.get() # Obtém a aba visível
+        title = self.selected_research["title"]
+        author = self.selected_research["author"]
+
+        # Carrega o HTML correspondente apenas se a aba estiver ativa
+        if current_tab == "Conteúdo Buscador":
+            html = self.db.get_extracted_html(title, author)
+            if html:
+                self.view.content_tab.display_html(html)
+        
+        elif current_tab == "Conteúdo Repositório":
+            html = self.db.get_lap_html(title, author)
+            if html:
+                self.view.repo_tab.display_html(html)

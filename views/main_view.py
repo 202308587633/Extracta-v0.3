@@ -9,15 +9,6 @@ from views.tabs.content_tab import ContentTab
 from views.tabs.repo_tab import RepoTab
 
 class MainView(ctk.CTk):
-    def __init__(self):
-        super().__init__()
-        self._configure_window()
-        self.viewmodel = MainViewModel(self)
-        self._setup_ui()
-        
-        # INICIALIZAÇÃO DE DADOS (Histórico + Tabela Minerada)
-        self.viewmodel.initialize_data()
-
     def _configure_window(self):
         self.title(config.APP_TITLE)
         self.geometry(config.WINDOW_SIZE)
@@ -45,12 +36,6 @@ class MainView(ctk.CTk):
     def switch_to_results_tab(self):
         self.tabview.set("Resultados")
     
-    def display_content_in_fourth_tab(self, html):
-        """Exibe o HTML na aba de Conteúdo Buscador e muda o foco"""
-        self.content_tab.display_html(html)
-        # Altere de "Conteúdo" para "Conteúdo Buscador" para coincidir com o _setup_ui
-        self.tabview.set("Conteúdo Buscador")
-                
     def after_thread_safe(self, func):
         self.after(0, func)
 
@@ -104,7 +89,7 @@ class MainView(ctk.CTk):
         # 4. Aba de Conteúdo do Buscador
         self.content_tab = ContentTab(
             parent=self.tabview.add("Conteúdo Buscador"),
-            on_browser_callback=self.viewmodel.open_html_in_browser # Permite abrir o HTML atual no navegador
+            on_browser_callback=self.viewmodel.open_ppb_browser_from_db
         )
         self.content_tab.pack(fill="both", expand=True)
 
@@ -128,9 +113,12 @@ class MainView(ctk.CTk):
         self.label_status = ctk.CTkLabel(self.status_container, text="Pronto", font=("Roboto", 12))
         self.label_status.pack(side="left", padx=10)
 
-    def set_tab_state(self, tab_name, state):
-        """Habilita ou desabilita abas dinamicamente"""
-        self.tabview._tab_dict[tab_name].configure(state=state)
+        # Configura o carregamento sob demanda ao trocar de aba
+        self.tabview.configure(command=self.viewmodel.on_tab_changed)
+
+        # Estado inicial: Desabilita as abas de conteúdo no menu
+        self.after(100, lambda: self.set_tab_state("Conteúdo Buscador", "disabled"))
+        self.after(100, lambda: self.set_tab_state("Conteúdo Repositório", "disabled"))
 
     def open_html_from_db_in_browser(self, html_content):
         """Abre o código HTML passado (vindo do banco) no navegador"""
@@ -144,6 +132,40 @@ class MainView(ctk.CTk):
             temp_path = f.name
         webbrowser.open(f"file://{temp_path}")
 
-############################
+    def display_content_in_fourth_tab(self, html):
+        """Exibe o HTML na aba de Conteúdo Buscador e muda o foco"""
+        self.content_tab.display_html(html)
+        # Correção: O nome deve ser exatamente "Conteúdo Buscador"
+        self.tabview.set("Conteúdo Buscador")
 
-# No método _setup_ui da MainView
+    def get_current_tab(self):
+        """Retorna o nome da aba selecionada atualmente"""
+        return self.tabview.get()
+    
+    def __init__(self):
+        super().__init__()
+        self._configure_window()
+        self.viewmodel = MainViewModel(self)
+        self._setup_ui()
+        
+        # INICIALIZAÇÃO DE DADOS
+        self.viewmodel.initialize_data()
+
+        # VINCULAÇÃO DA MUDANÇA DE ABA (O passo que faltava)
+        # Isso faz com que toda vez que o usuário trocar de aba, 
+        # o método on_tab_changed do ViewModel seja disparado.
+        self.tabview.configure(command=self.viewmodel.on_tab_changed)
+        
+    def set_tab_state(self, tab_name, state):
+        """
+        Habilita ou desabilita apenas a aba específica no menu superior.
+        """
+        try:
+            # Acessamos o dicionário de botões interno do componente segmented_button
+            # Isso garante que APENAS o botão da aba mencionada mude de estado
+            self.tabview._segmented_button._buttons_dict[tab_name].configure(state=state)
+        except KeyError:
+            print(f"Erro: Aba '{tab_name}' não encontrada.")
+        except Exception as e:
+            print(f"Erro ao mudar estado da aba: {e}")
+    
