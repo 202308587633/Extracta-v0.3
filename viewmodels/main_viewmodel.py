@@ -3,7 +3,7 @@ import time
 import threading
 from models.database import DatabaseModel
 from models.scraper import ScraperModel
-from models.parsers.vufind_parser import VufindParser # Import necessário para o Passo 2
+from models.parsers.vufind_parser import VufindParser
 import config
 import os
 import tempfile
@@ -16,8 +16,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             # Substituído: get_history_item -> get_plb_content
             original_url, html = self.db.get_plb_content(self.current_history_id)
             if not html: return
-            
-            page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
 
             #original_url, html = result
             page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
@@ -64,7 +62,7 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self.db.delete_history(self.current_history_id)
             self._log(f"Atividade: Item {self.current_history_id} excluído do banco de dados.", "green")
             self.current_history_id = None
-            self.view.display_history_content("")
+            self.view.self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
             self.load_history_list()
         except Exception as e:
             self._log(f"Erro Crítico na exclusão: {e}", "red")
@@ -132,22 +130,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self.view.after_thread_safe(self.load_history_list)
         except Exception as e:
             self._log(f"Erro ao raspar {doc_type}: {e}", "red")
-
-    def handle_result_selection(self, title, author):
-        """Valida a existência de PPB e PPR para habilitar as abas correspondentes"""
-        self.selected_research = {"title": title, "author": author}
-        
-        # Verifica existência de dados nas tabelas relacionais
-        html_ppb = self.db.get_extracted_html(title, author)
-        # Busca o HTML na nova tabela ppr
-        html_ppr = self.db.get_ppr_html(title, author)
-
-        # Atualiza o estado das abas (Habilitado/Desabilitado)
-        self.view.set_tab_state("Conteúdo PPB", "normal" if html_ppb else "disabled")
-        self.view.set_tab_state("Conteúdo PPR", "normal" if html_ppr else "disabled")
-        
-        # Se o usuário já estiver em uma aba de conteúdo, atualiza o texto imediatamente
-        self.on_tab_changed()
 
     def load_history_list(self):
         """Carrega da tabela 'plb' e atualiza a lista diretamente na aba"""

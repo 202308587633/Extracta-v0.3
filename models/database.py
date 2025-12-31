@@ -129,18 +129,6 @@ class DatabaseModel:
             cursor.execute("SELECT title, author, ppb_link, ppr_link FROM pesquisas ORDER BY extracted_at DESC")
             return [{'title': r[0], 'author': r[1], 'ppb_link': r[2], 'ppr_link': r[3]} for r in cursor.fetchall()]
 
-    def get_lap_html(self, title, author): # Mantenha o nome da função se desejar, ou mude para get_ppr_html
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT p_content.html_content 
-                FROM plb p_content
-                JOIN pesquisas p_meta ON p_content.url = p_meta.ppr_link
-                WHERE p_meta.title = ? AND p_meta.author = ?
-            """, (title, author))
-            result = cursor.fetchone()
-            return result[0] if result else None
-
     def save_plb(self, url, html_content):
         try:
             with sqlite3.connect(self.db_name) as conn:

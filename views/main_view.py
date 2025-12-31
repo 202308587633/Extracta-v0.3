@@ -21,12 +21,6 @@ class MainView(ctk.CTk):
     def toggle_button(self, state):
         self.home_tab.set_button_state(state)
 
-    def update_history_list(self, items):
-        self.history_tab.update_list(items)
-
-    def display_extracted_results(self, data):
-        self.results_tab.display_results(data)
-
     def switch_to_results_tab(self):
         self.tabview.set("Resultados")
     

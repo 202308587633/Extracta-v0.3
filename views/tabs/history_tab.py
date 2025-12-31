@@ -29,7 +29,7 @@ class HistoryTab(ctk.CTkFrame):
     def _setup_context_menu(self):
         """Cria o menu único para DeepScrap e visualização"""
         self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="📋 Fazer DeepScrap (Extrair Pesquisas, PPBs e LAPs)", command=self.on_extract_callback)
+        self.context_menu.add_command(label="📋 Fazer DeepScrap (Extrair Pesquisas, PPBs e PPRs)", command=self.on_extract_callback)
         self.context_menu.add_command(label="🔍 Buscar Paginação e Raspar PLBs seguintes", command=self.on_pagination_callback)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="🌐 Abrir PLB no Navegador", command=self.on_browser_callback)

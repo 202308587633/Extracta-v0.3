@@ -186,6 +186,8 @@ class ResultsTab(ctk.CTkFrame):
         if not selected: return
         
         values = self.tree.item(selected[0])['values']
+        title, author = values[0], values[1]
+        
         self.viewmodel.handle_result_selection(title, author)
         
         # Mude para o nome novo
