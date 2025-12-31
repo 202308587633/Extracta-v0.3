@@ -180,32 +180,26 @@ class ResultsTab(ctk.CTkFrame):
         self.viewmodel.handle_result_selection(values[0], values[1])
             
     def _view_ppb_internal(self):
-        """Solicita ao ViewModel o carregamento e muda o foco para a aba de conteúdo"""
+        """Solicita carregamento e muda para a aba de busca"""
         selected = self.tree.selection()
         if not selected: return
         
-        # Obtém Título e Autor da linha selecionada
         values = self.tree.item(selected[0])['values']
-        title, author = values[0], values[1]
+        self.viewmodel.handle_result_selection(values[0], values[1])
         
-        # 1. Aciona a lógica de seleção e carregamento no ViewModel
-        self.viewmodel.handle_result_selection(title, author)
-        
-        # 2. Comando para a MainView mudar o foco para a aba "Conteúdo Buscador"
-        # Somente se a aba foi habilitada (existe HTML no banco)
-        if self.viewmodel.db.get_extracted_html(title, author):
-            self.viewmodel.view.switch_to_content_tab()
+        # Chama o método da MainView que agora está protegido por try/except
+        self.viewmodel.view.switch_to_content_tab()
 
     def _view_ppr_internal(self):
-        """Solicita o carregamento da PPR e muda o foco da aba"""
+        """Solicita carregamento e muda para a aba PPR"""
         selected = self.tree.selection()
         if not selected: return
         
         values = self.tree.item(selected[0])['values']
-        title, author = values[0], values[1]
-        
         self.viewmodel.handle_result_selection(title, author)
         
-        # Verifica usando o novo nome do método
-        if self.viewmodel.db.get_ppr_html(title, author):
+        # Mude para o nome novo
+        try:
             self.viewmodel.view.tabview.set("Conteúdo PPR")
+        except ValueError:
+            self.viewmodel._log("Erro: Aba 'Conteúdo PPR' não encontrada.", "red")

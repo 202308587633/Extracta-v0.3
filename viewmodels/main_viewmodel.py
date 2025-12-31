@@ -19,7 +19,7 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             
             page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
 
-            original_url, html = result
+            #original_url, html = result
             page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
             if not page_numbers:
                 self._log("Nenhuma paginação numérica encontrada.", "yellow")
@@ -143,30 +143,11 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         html_ppr = self.db.get_ppr_html(title, author)
 
         # Atualiza o estado das abas (Habilitado/Desabilitado)
-        self.view.set_tab_state("Conteúdo Buscador", "normal" if html_ppb else "disabled")
-        self.view.set_tab_state("Conteúdo Repositório", "normal" if html_ppr else "disabled")
+        self.view.set_tab_state("Conteúdo PPB", "normal" if html_ppb else "disabled")
+        self.view.set_tab_state("Conteúdo PPR", "normal" if html_ppr else "disabled")
         
         # Se o usuário já estiver em uma aba de conteúdo, atualiza o texto imediatamente
         self.on_tab_changed()
-
-    def on_tab_changed(self):
-        """Carrega o HTML do banco apenas quando a aba específica é selecionada"""
-        if not hasattr(self, 'selected_research'): return
-
-        current_tab = self.view.tabview.get()
-        title = self.selected_research["title"]
-        author = self.selected_research["author"]
-
-        if current_tab == "Conteúdo Buscador":
-            html = self.db.get_extracted_html(title, author)
-            if html:
-                self.view.content_tab.display_html(html)
-        
-        elif current_tab == "Conteúdo Repositório":
-            # Busca o conteúdo da tabela ppr para exibir na interface
-            html = self.db.get_ppr_html(title, author)
-            if html:
-                self.view.repo_tab.display_html(html)
 
     def load_history_list(self):
         """Carrega da tabela 'plb' e atualiza a lista diretamente na aba"""
@@ -184,69 +165,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
                 self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
         except Exception as e:
             self._log(f"Erro ao carregar dados salvos: {e}", "red")
-
-    def _open_html_string_in_browser(self, html_content):
-        """Método utilitário privado para abrir qualquer string HTML no navegador."""
-        if not html_content:
-            self._log("Erro: O conteúdo HTML está vazio.", "red")
-            return
-
-        try:
-            import tempfile, webbrowser
-            # Cria um arquivo temporário que persiste após o fechamento do objeto f
-            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
-                f.write(html_content)
-                temp_path = f.name
-            
-            # Abre o arquivo no navegador padrão
-            webbrowser.open(f"file://{temp_path}")
-            self._log(f"Sucesso: Conteúdo aberto no navegador.", "green")
-        except Exception as e:
-            self._log(f"Erro Crítico ao processar HTML temporário: {e}", "red")
-
-    def open_ppb_browser_from_db(self, title, author):
-        """Recupera a PPB do banco e usa o utilitário para abrir."""
-        self._log(f"Visualizando PPB no navegador: {title}", "yellow")
-        html = self.db.get_extracted_html(title, author)
-        self._open_html_string_in_browser(html)
-        
-    def open_ppr_in_browser(self):
-        """Recupera a PPR do banco e usa o utilitário para abrir."""
-        if not hasattr(self, 'selected_research'):
-            self._log("Selecione uma pesquisa primeiro.", "red")
-            return
-
-        title = self.selected_research["title"]
-        author = self.selected_research["author"]
-        
-        self._log(f"Visualizando PPR no navegador: {title}", "yellow")
-        html = self.db.get_ppr_html(title, author) # Usa o método unificado PPR
-        self._open_html_string_in_browser(html)
-
-    def open_plb_in_browser(self):
-        """Recupera a PLB do histórico e usa o utilitário para abrir."""
-        if not self.current_history_id:
-            self._log("Selecione um item do histórico primeiro.", "red")
-            return
-            
-        self._log("Visualizando PLB (Histórico) no navegador...", "yellow")
-        html = self.db.get_plb_content(self.current_history_id)
-        self._open_html_string_in_browser(html)
-
-    def _run_task(self, url):
-        """Executa o scrap inicial e trata erros de rede ou banco"""
-        try:
-            html = self.scraper.fetch_html(url) # Captura erros de rede específicos
-            self.db.save_plb(url, html)        # Captura erros de banco específicos
-            
-            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
-            self.view.after_thread_safe(self.load_history_list)
-            self._log("Página capturada com sucesso.", "green")
-        except Exception as e:
-            # Exibe a mensagem precisa (ex: "Erro: Falha na ligação") na barra de status
-            self._log(str(e), "red")
-        finally:
-            self.view.toggle_button(True)
 
     def extract_data_command(self):
         """Extrai dados tratando possíveis falhas no banco ou no parser"""
@@ -272,3 +190,87 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
                 self._log("Nenhum dado científico encontrado.", "red")
         except Exception as e:
             self._log(str(e), "red")
+
+    def _open_html_string_in_browser(self, html_content):
+        """Método utilitário privado para abrir strings HTML no navegador."""
+        if not html_content:
+            self._log("Erro: O conteúdo HTML está vazio ou não foi capturado.", "red")
+            return
+        try:
+            import tempfile, webbrowser
+            with tempfile.NamedTemporaryFile('w', delete=False, suffix='.html', encoding='utf-8') as f:
+                f.write(html_content)
+                temp_path = f.name
+            webbrowser.open(f"file://{temp_path}")
+            self._log("Conteúdo aberto com sucesso no navegador.", "green")
+        except Exception as e:
+            self._log(f"Erro ao gerar visualização temporária: {e}", "red")
+
+    def open_plb_in_browser(self):
+        """Abre a PLB (Página de Listagem) no navegador."""
+        if not self.current_history_id:
+            self._log("Selecione um item do histórico primeiro.", "yellow")
+            return
+        _, html = self.db.get_plb_content(self.current_history_id)
+        self._open_html_string_in_browser(html)
+
+    def open_ppb_browser_from_db(self, title, author):
+        """Abre a PPB (Página de Pesquisa) no navegador."""
+        html = self.db.get_extracted_html(title, author)
+        self._open_html_string_in_browser(html)
+
+    def open_ppr_in_browser(self):
+        """Abre a PPR (Página do Repositório) no navegador."""
+        if not hasattr(self, 'selected_research'):
+            self._log("Selecione uma pesquisa na tabela de resultados.", "yellow")
+            return
+        title = self.selected_research["title"]
+        author = self.selected_research["author"]
+        html = self.db.get_ppr_html(title, author)
+        self._open_html_string_in_browser(html)
+
+    def _run_task(self, url):
+        """Executa o scrap inicial com tratamento de erros de rede."""
+        try:
+            html = self.scraper.fetch_html(url) # Trata RequestException internamente
+            self.db.save_plb(url, html)        # Trata sqlite3.Error internamente
+            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
+            self.view.after_thread_safe(self.load_history_list)
+            self._log("PLB capturada e salva com sucesso.", "green")
+        except Exception as e:
+            self._log(str(e), "red") # Feedback preciso na barra de status
+        finally:
+            self.view.toggle_button(True)
+
+    def on_tab_changed(self):
+        """Atualiza o conteúdo baseado no nome exato da aba selecionada"""
+        if not hasattr(self, 'selected_research'): return
+
+        current_tab = self.view.tabview.get()
+        title = self.selected_research["title"]
+        author = self.selected_research["author"]
+
+        # Sincronize estes nomes com os nomes usados no self.tabview.add() da MainView
+        if current_tab == "Conteúdo PPB":
+            html = self.db.get_extracted_html(title, author)
+            if html:
+                self.view.content_tab.display_html(html)
+        
+        elif current_tab == "Conteúdo PPR":
+            html = self.db.get_ppr_html(title, author)
+            if html:
+                self.view.repo_tab.display_html(html)
+
+    def handle_result_selection(self, title, author):
+        self.selected_research = {"title": title, "author": author}
+        
+        html_ppb = self.db.get_extracted_html(title, author)
+        html_ppr = self.db.get_ppr_html(title, author)
+
+        # Habilita ou desabilita as abas conforme a existência de dados
+        self.view.set_tab_state("Conteúdo PPB", "normal" if html_ppb else "disabled")
+        self.view.set_tab_state("Conteúdo PPR", "normal" if html_ppr else "disabled")
+        
+        # FORÇA a atualização do conteúdo caso o usuário já esteja visualizando a aba
+        self.on_tab_changed()
+        

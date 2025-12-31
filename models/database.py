@@ -141,35 +141,6 @@ class DatabaseModel:
             result = cursor.fetchone()
             return result[0] if result else None
 
-    def save_ppr_content(self, url, html_content):
-        """Grava o HTML do repositório vinculado à pesquisa correspondente via ppr_link"""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            # Localiza o ID da pesquisa pelo link ppr_link (antigo lap_link)
-            cursor.execute("SELECT id FROM pesquisas WHERE ppr_link = ?", (url,))
-            res = cursor.fetchone()
-            if res:
-                pesquisa_id = res[0]
-                cursor.execute("""
-                    INSERT INTO ppr (pesquisa_id, url, html_content)
-                    VALUES (?, ?, ?)
-                """, (pesquisa_id, url, html_content))
-                conn.commit()
-
-    def get_ppr_html(self, title, author):
-        """Recupera o HTML da tabela 'ppr' através da relação com a tabela 'pesquisas'"""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            # A query já utiliza a tabela ppr e ppr_link
-            cursor.execute("""
-                SELECT r.html_content 
-                FROM ppr r
-                JOIN pesquisas p ON r.select_id = p.id
-                WHERE p.title = ? AND p.author = ?
-            """, (title, author))
-            result = cursor.fetchone()
-            return result[0] if result else None
-
     def save_plb(self, url, html_content):
         try:
             with sqlite3.connect(self.db_name) as conn:
@@ -188,3 +159,35 @@ class DatabaseModel:
                 return result if result else (None, None)
         except sqlite3.Error as e:
             raise Exception(f"Erro ao ler dados da PLB: {e}")
+
+    def save_ppr_content(self, url, html_content):
+        """Grava o HTML da PPR vinculado à pesquisa via ppr_link."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM pesquisas WHERE ppr_link = ?", (url,))
+                res = cursor.fetchone()
+                if res:
+                    cursor.execute("""
+                        INSERT INTO ppr (pesquisa_id, url, html_content)
+                        VALUES (?, ?, ?)
+                    """, (res[0], url, html_content))
+                    conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro de Banco de Dados (PPR): {e}")
+
+    def get_ppr_html(self, title, author):
+        """Busca o HTML na tabela ppr através da relação relacional."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT r.html_content 
+                    FROM ppr r
+                    JOIN pesquisas p ON r.pesquisa_id = p.id
+                    WHERE p.title = ? AND p.author = ?
+                """, (title, author))
+                result = cursor.fetchone()
+                return result[0] if result else None
+        except sqlite3.Error as e:
+            raise Exception(f"Erro na consulta SQL (PPR): {e}")

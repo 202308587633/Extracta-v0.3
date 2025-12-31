@@ -73,17 +73,19 @@ class MainView(ctk.CTk):
         )
         self.results_tab.pack(fill="both", expand=True)
 
-        # 4. Aba de Conteúdo do Buscador
+        # 4. Aba de Conteúdo do Buscador (PPB)
+        # Verifique se o nome aqui é exatamente "Conteúdo Buscador"
         self.content_tab = ContentTab(
-            parent=self.tabview.add("Conteúdo PPB"),
+            parent=self.tabview.add("Conteúdo PPB"), 
             on_browser_callback=self.viewmodel.open_ppb_browser_from_db
         )
         self.content_tab.pack(fill="both", expand=True)
 
-        # 5. Aba de Conteúdo do Repositório
+        # 5. Aba de Conteúdo PPR (Página de Produção do Repositório)
+        # Verifique se o nome aqui é exatamente "Conteúdo PPR"
         self.repo_tab = RepoTab(
-            parent=self.tabview.add("Conteúdo PPR"),
-            on_browser_callback=self.viewmodel.open_repo_in_browser 
+            parent=self.tabview.add("Conteúdo PPR"), # Verifique se está exatamente assim
+            on_browser_callback=self.viewmodel.open_ppr_in_browser
         )
         self.repo_tab.pack(fill="both", expand=True)
 
@@ -104,8 +106,8 @@ class MainView(ctk.CTk):
         self.tabview.configure(command=self.viewmodel.on_tab_changed)
 
         # Estado inicial: Desabilita as abas de conteúdo no menu
-        self.after(100, lambda: self.set_tab_state("Conteúdo Buscador", "disabled"))
-        self.after(100, lambda: self.set_tab_state("Conteúdo Repositório", "disabled"))
+        self.after(100, lambda: self.set_tab_state("Conteúdo PPB", "disabled"))
+        self.after(100, lambda: self.set_tab_state("Conteúdo PPR", "disabled"))
 
     def open_html_from_db_in_browser(self, html_content):
         """Abre o código HTML passado (vindo do banco) no navegador"""
@@ -151,6 +153,12 @@ class MainView(ctk.CTk):
             print(f"Erro ao mudar estado da aba: {e}")
     
     def switch_to_content_tab(self):
-        """Muda o foco visual para a aba Conteúdo Buscador"""
-        self.tabview.set("Conteúdo Buscador")
-    
+        """Muda o foco visual para a aba Conteúdo PPB"""
+        try:
+            self.tabview.set("Conteúdo PPB") # O nome deve ser IDÊNTICO ao add()
+        except ValueError:
+            print("Erro: Aba 'Conteúdo PPB' não encontrada. Verifique o nome no _setup_ui.")
+
+#####
+
+# No método _setup_ui da MainView
