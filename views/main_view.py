@@ -21,9 +21,6 @@ class MainView(ctk.CTk):
     def toggle_button(self, state):
         self.home_tab.set_button_state(state)
 
-    def switch_to_results_tab(self):
-        self.tabview.set("Resultados")
-    
     def after_thread_safe(self, func):
         self.after(0, func)
 
@@ -145,10 +142,14 @@ class MainView(ctk.CTk):
             print(f"Erro: Aba '{tab_name}' não encontrada.")
         except Exception as e:
             print(f"Erro ao mudar estado da aba: {e}")
+
+    def switch_to_results_tab(self):
+        """Muda o foco para a aba de resultados após a extração."""
+        self.tabview.set("Resultados")
     
     def switch_to_content_tab(self):
-        """Muda o foco visual para a aba Conteúdo PPB"""
+        """Muda o foco visual para a aba Conteúdo PPB."""
         try:
-            self.tabview.set("Conteúdo PPB") # O nome deve ser IDÊNTICO ao add()
+            self.tabview.set("Conteúdo PPB") 
         except ValueError:
-            print("Erro: Aba 'Conteúdo PPB' não encontrada. Verifique o nome no _setup_ui.")
+            self.update_status("Erro: Aba 'Conteúdo PPB' não encontrada.", "red")

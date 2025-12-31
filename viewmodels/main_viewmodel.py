@@ -10,26 +10,6 @@ import tempfile
 import webbrowser
 
 class MainViewModel: # Certifique-se de que o nome da classe está correto
-    def check_pagination_and_scrape(self):
-        if not self.current_history_id: return
-        try:
-            # Substituído: get_history_item -> get_plb_content
-            original_url, html = self.db.get_plb_content(self.current_history_id)
-            if not html: return
-
-            #original_url, html = result
-            page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
-            if not page_numbers:
-                self._log("Nenhuma paginação numérica encontrada.", "yellow")
-                return
-            max_page = max(map(int, page_numbers))
-            if max_page <= 1: return
-            self._log(f"Paginação detectada ({max_page} páginas).", "green")
-            thread = threading.Thread(target=self._run_pagination_task, args=(original_url, max_page))
-            thread.start()
-        except Exception as e:
-            self._log(f"Erro na paginação: {e}", "red")
-
     def __init__(self, view):
         self.view = view
         self.db = DatabaseModel(db_name=config.DB_NAME)
@@ -53,19 +33,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         self._log(f"Iniciando scrap do repositório: {url}", "yellow")
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
         thread.start()
-
-    def delete_history_item(self):
-        if not self.current_history_id: 
-            self._log("Tentativa de exclusão sem seleção.", "yellow")
-            return
-        try:
-            self.db.delete_history(self.current_history_id)
-            self._log(f"Atividade: Item {self.current_history_id} excluído do banco de dados.", "green")
-            self.current_history_id = None
-            self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
-            self.load_history_list()
-        except Exception as e:
-            self._log(f"Erro Crítico na exclusão: {e}", "red")
 
     def _log(self, message, color="white"):
         """
@@ -218,19 +185,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             if html:
                 self.view.repo_tab.display_html(html)
 
-    def handle_result_selection(self, title, author):
-        self.selected_research = {"title": title, "author": author}
-        
-        html_ppb = self.db.get_extracted_html(title, author)
-        html_ppr = self.db.get_ppr_html(title, author)
-
-        # Habilita ou desabilita as abas conforme a existência de dados
-        self.view.set_tab_state("Conteúdo PPB", "normal" if html_ppb else "disabled")
-        self.view.set_tab_state("Conteúdo PPR", "normal" if html_ppr else "disabled")
-        
-        # FORÇA a atualização do conteúdo caso o usuário já esteja visualizando a aba
-        self.on_tab_changed()
-
     def _open_html_string_in_browser(self, html_content):
         """Método utilitário para abrir strings HTML no navegador."""
         if not html_content:
@@ -258,3 +212,53 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         # Recupera o HTML da tabela ppr
         html = self.db.get_ppr_html(title, author)
         self._open_html_string_in_browser(html)
+
+    def delete_history_item(self):
+        """Remove um item do histórico e limpa a visualização da aba."""
+        if not self.current_history_id: 
+            self._log("Tentativa de exclusão sem seleção.", "yellow")
+            return
+        try:
+            self.db.delete_history(self.current_history_id)
+            self._log(f"Atividade: Item {self.current_history_id} excluído do banco de dados.", "green")
+            self.current_history_id = None
+            # CORREÇÃO: Removida a repetição de self.view e acessada a aba diretamente
+            self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
+            self.load_history_list()
+        except Exception as e:
+            self._log(f"Erro Crítico na exclusão: {e}", "red")
+
+    def check_pagination_and_scrape(self):
+        """Detecta e inicia a raspagem de páginas subsequentes."""
+        if not self.current_history_id: return
+        try:
+            # CORREÇÃO: Removida a linha duplicada de re.findall
+            original_url, html = self.db.get_plb_content(self.current_history_id)
+            if not html: return
+            
+            page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
+            if not page_numbers:
+                self._log("Nenhuma paginação numérica encontrada.", "yellow")
+                return
+            max_page = max(map(int, page_numbers))
+            if max_page <= 1: return
+            self._log(f"Paginação detectada ({max_page} páginas).", "green")
+            thread = threading.Thread(target=self._run_pagination_task, args=(original_url, max_page))
+            thread.start()
+        except Exception as e:
+            self._log(f"Erro na paginação: {e}", "red")
+
+    def handle_result_selection(self, title, author):
+        """Atualiza o estado das abas e injeta o conteúdo conforme a seleção na tabela."""
+        self.selected_research = {"title": title, "author": author}
+        
+        # Busca a existência de conteúdo nas tabelas PPB e PPR
+        html_ppb = self.db.get_extracted_html(title, author)
+        html_ppr = self.db.get_ppr_html(title, author)
+
+        # Habilita ou desabilita as abas conforme a existência de dados no banco
+        self.view.set_tab_state("Conteúdo PPB", "normal" if html_ppb else "disabled")
+        self.view.set_tab_state("Conteúdo PPR", "normal" if html_ppr else "disabled")
+        
+        # Força a atualização imediata caso o usuário já esteja na aba
+        self.on_tab_changed()
