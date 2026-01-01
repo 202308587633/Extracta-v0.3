@@ -66,7 +66,6 @@ from parsers.pucrio_parser import PUCRioParser
 from parsers.uem_parser import UEMParser
 from parsers.ufmt_parser import UfmtParser
 
-
 class ParserFactory:
     def __init__(self):
         self._default = GenericParser()
@@ -159,35 +158,65 @@ class ParserFactory:
 
     def get_parser(self, url, html_content=None):
         """
-        Seleciona o parser adequado. Prioriza o BDTDParser se o HTML for do buscador VuFind.
+        Seleciona o parser adequado. 
+        ORDEM ATUALIZADA:
+        1. Mapeamento explícito de Domínio/Handle (Prioridade Máxima).
+        2. Lógica específica para repositórios compartilhados (ex: Cruzeiro do Sul).
+        3. Detecção baseada no conteúdo HTML (VuFind, DSpace Genérico).
         """
         if not url: 
             return self._default
         
         url_lower = url.lower()
-        html_lower = html_content.lower() if html_content else ""
-
-        # PRIORIDADE: Detecção de Buscador (VuFind/BDTD)
-        # Verifica se o HTML possui a marca do sistema VuFind ou se a URL é do IBICT
-        if "vufind" in html_lower or "bdtd.ibict.br" in url_lower:
-            from parsers.bdtd_parser import BDTDParser
-            return BDTDParser()
-
-        # Lógica para Repositórios Compartilhados (Cruzeiro do Sul / UDF / UNIPÊ)
-        if "repositorio.cruzeirodosul.edu.br" in url_lower:
-            if html_content:
-                html_upper = html_content.upper()
-                if "UNIPÊ" in html_upper or "JOÃO PESSOA" in html_upper:
-                    from parsers.unipe_parser import UNIPEParser
-                    return UNIPEParser()
-                if "UDF" in html_upper or "DISTRITO FEDERAL" in html_upper:
-                    from parsers.udf_parser import UDFParser
-                    return UDFParser()
-            return self._default
-
-        # Lógica Padrão por Domínio/Handle
+        
+        # --- 1. PRIORIDADE MÁXIMA: Mapeamento por Domínio/Handle ---
+        # Se o domínio já é conhecido (ex: .ucs.br, .usp.br), usa o parser especializado imediatamente.
+        # Isso evita que o parser genérico do DSpace "roube" a vez de um parser específico 
+        # que herda dele.
         for domain, parser_cls in self._map.items():
             if domain in url_lower:
                 return parser_cls()
+
+        # --- 2. Lógica para Repositórios Compartilhados Específicos ---
+        # Casos onde o domínio é o mesmo, mas o conteúdo define a instituição (ex: Cruzeiro do Sul)
+        if "repositorio.cruzeirodosul.edu.br" in url_lower and html_content:
+            html_upper = html_content.upper()
+            if "UNIPÊ" in html_upper or "JOÃO PESSOA" in html_upper:
+                from parsers.unipe_parser import UNIPEParser
+                return UNIPEParser()
+            if "UDF" in html_upper or "DISTRITO FEDERAL" in html_upper:
+                from parsers.udf_parser import UDFParser
+                return UDFParser()
+
+        # --- 3. Detecção Genérica baseada em HTML (Fallback) ---
+        # Se não achou pelo domínio, tenta adivinhar o sistema pelo HTML
+        if html_content:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html_content, 'html.parser')
+            html_lower = html_content.lower()
+            
+            # Detecção de Buscador (VuFind/BDTD)
+            if "vufind" in html_lower or "bdtd.ibict.br" in url_lower:
+                from parsers.bdtd_parser import BDTDParser
+                return BDTDParser()
+
+            # Detecção Inteligente DSpace (Angular vs JSPUI)
+            
+            # Angular (DSpace 7+) - Procura por tags específicas do framework
+            if soup.find('ds-app') or soup.find('ds-root'):
+                from parsers.dspace_angular import DSpaceAngularParser
+                return DSpaceAngularParser()
+
+            # JSPUI/XMLUI (DSpace Antigo) - Procura por IDs clássicos
+            if soup.find('div', id='ds-main') or soup.find('div', id='aspect_artifactbrowser_ItemViewer_div_item-view'):
+                from parsers.dspace_jspui import DSpaceJSPUIParser
+                return DSpaceJSPUIParser()
+
+            # Fallback Dublin Core (Geralmente indica JSPUI se houver muitas tags DC)
+            dc_tags = soup.find_all('meta', attrs={'name': lambda x: x and x.startswith('DC.')})
+            if len(dc_tags) > 3:
+                from parsers.dspace_jspui import DSpaceJSPUIParser
+                return DSpaceJSPUIParser()
         
-        return self._default    
+        # Se nada funcionou, retorna o parser genérico básico
+        return self._default

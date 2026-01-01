@@ -4,69 +4,6 @@ from tkinter import ttk
 import tkinter as tk
 
 class ResultsTab(ctk.CTkFrame):
-    def _setup_ui(self):
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
-
-        self.label_count = ctk.CTkLabel(self, text="Aguardando dados...", font=("Roboto", 14))
-        self.label_count.grid(row=0, column=0, pady=(10, 5), sticky="ew")
-
-        self.container = ctk.CTkFrame(self, fg_color="transparent")
-        self.container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-        self.container.grid_columnconfigure(0, weight=1)
-        self.container.grid_rowconfigure(0, weight=1)
-
-        style = ttk.Style()
-        style.theme_use("default")
-        
-        bg_color = "#2b2b2b"
-        text_color = "#ffffff"
-        selected_bg = "#1f538d"
-        header_bg = "#1f1f1f"
-        
-        style.configure("Treeview",
-                        background=bg_color,
-                        foreground=text_color,
-                        fieldbackground=bg_color,
-                        rowheight=30,
-                        borderwidth=0,
-                        font=("Roboto", 11))
-        
-        style.map('Treeview', background=[('selected', selected_bg)])
-        
-        style.configure("Treeview.Heading",
-                        background=header_bg,
-                        foreground=text_color,
-                        relief="flat",
-                        padding=(5, 5),
-                        font=("Roboto", 12, "bold"))
-        
-        style.map("Treeview.Heading",
-                  background=[('active', '#343638')])
-
-        columns = ("title", "author", "sigla", "universidade")
-        self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="browse")
-
-        self.tree.heading("title", text="Nome da Pesquisa")
-        self.tree.heading("author", text="Autor")
-        self.tree.heading("sigla", text="Sigla")
-        self.tree.heading("universidade", text="Universidade")
-
-        self.tree.column("title", width=400, minwidth=150, anchor="w")
-        self.tree.column("author", width=200, minwidth=100, anchor="w")
-        self.tree.column("sigla", width=80, anchor="center")
-        self.tree.column("universidade", width=250, anchor="w")
-
-        self.scrollbar = ctk.CTkScrollbar(self.container, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=self.scrollbar.set)
-
-        self.tree.grid(row=0, column=0, sticky="nsew")
-        self.scrollbar.grid(row=0, column=1, sticky="ns")
-
-        self.tree.bind("<Double-1>", self._on_double_click)
-        self.tree.bind("<Button-3>", self._show_context_menu)
-        self.tree.bind("<<TreeviewSelect>>", self._on_row_select) # Vincula a seleção de linha
-
     def _show_context_menu(self, event):
         row_id = self.tree.identify_row(event.y)
         if row_id:
@@ -209,13 +146,78 @@ class ResultsTab(ctk.CTkFrame):
         # Chama a função unificada no ViewModel para abrir a PPR
         self.viewmodel.open_ppr_in_browser()
 
+    def _setup_ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        self.label_count = ctk.CTkLabel(self, text="Aguardando dados...", font=("Roboto", 14))
+        self.label_count.grid(row=0, column=0, pady=(10, 5), sticky="ew")
+
+        self.container = ctk.CTkFrame(self, fg_color="transparent")
+        self.container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.container.grid_columnconfigure(0, weight=1)
+        self.container.grid_rowconfigure(0, weight=1)
+
+        style = ttk.Style()
+        style.theme_use("default")
+        
+        bg_color = "#2b2b2b"
+        text_color = "#ffffff"
+        selected_bg = "#1f538d"
+        header_bg = "#1f1f1f"
+        
+        style.configure("Treeview",
+                        background=bg_color,
+                        foreground=text_color,
+                        fieldbackground=bg_color,
+                        rowheight=30,
+                        borderwidth=0,
+                        font=("Roboto", 11))
+        
+        style.map('Treeview', background=[('selected', selected_bg)])
+        
+        style.configure("Treeview.Heading",
+                        background=header_bg,
+                        foreground=text_color,
+                        relief="flat",
+                        padding=(5, 5),
+                        font=("Roboto", 12, "bold"))
+        
+        style.map("Treeview.Heading",
+                  background=[('active', '#343638')])
+
+        # ATUALIZADO: Colunas incluem 'programa'
+        columns = ("title", "author", "sigla", "universidade", "programa")
+        self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="browse")
+
+        self.tree.heading("title", text="Nome da Pesquisa")
+        self.tree.heading("author", text="Autor")
+        self.tree.heading("sigla", text="Sigla")
+        self.tree.heading("universidade", text="Universidade")
+        self.tree.heading("programa", text="Programa")
+
+        self.tree.column("title", width=300, minwidth=150, anchor="w")
+        self.tree.column("author", width=150, minwidth=100, anchor="w")
+        self.tree.column("sigla", width=60, anchor="center")
+        self.tree.column("universidade", width=200, anchor="w")
+        self.tree.column("programa", width=200, anchor="w")
+
+        self.scrollbar = ctk.CTkScrollbar(self.container, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=self.scrollbar.set)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.scrollbar.grid(row=0, column=1, sticky="ns")
+
+        self.tree.bind("<Double-1>", self._on_double_click)
+        self.tree.bind("<Button-3>", self._show_context_menu)
+        self.tree.bind("<<TreeviewSelect>>", self._on_row_select)
+
     def display_results(self, results):
         self.link_map.clear()
         for item in self.tree.get_children():
             self.tree.delete(item)
 
         for item in results:
-            # Injeção dos dados académicos incluindo o Programa
             values = (
                 item.get('title'), 
                 item.get('author'), 

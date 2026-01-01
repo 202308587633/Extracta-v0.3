@@ -7,6 +7,11 @@ class BDTDParser(BaseParser):
         # Inicializa com valores padrão que serão sobrescritos no extract
         super().__init__(sigla="-", universidade="-")
 
+    # --- NOVO MÉTODO (Resolve o erro 'object has no attribute extract') ---
+    def extract(self, html_content, base_url):
+        return self.extract_pure_soup(html_content, base_url)
+    # ---------------------------------------------------------------------
+
     def extract_pure_soup(self, html_content, url, on_progress=None):
         soup = BeautifulSoup(html_content, 'html.parser')
         data = {'sigla': '-', 'universidade': '-', 'programa': '-', 'link_pdf': '-'}
@@ -26,4 +31,4 @@ class BDTDParser(BaseParser):
             link = link_row.find_next('a', href=True)
             if link: data['link_pdf'] = link['href']
 
-        return data    
+        return data

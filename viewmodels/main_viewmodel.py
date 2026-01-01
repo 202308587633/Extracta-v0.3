@@ -260,8 +260,113 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(f"Erro Crítico: {e}", "red")
 
+    def _extract_meta_content(self, soup, meta_names):
+        """Busca conteúdo em tags <meta name='...'>"""
+        for name in meta_names:
+            tag = soup.find('meta', attrs={'name': name})
+            if not tag:
+                tag = soup.find('meta', attrs={'name': name.lower()})
+            if tag and tag.get('content'):
+                return tag['content'].strip()
+        return None
+
+    def _find_meta_value(self, soup, names, filter_word=None):
+        """Busca valor em meta tags."""
+        for name in names:
+            tags = soup.find_all('meta', attrs={'name': name})
+            if not tags: # Tenta lowercase se não achar
+                tags = soup.find_all('meta', attrs={'name': name.lower()})
+                
+            for tag in tags:
+                content = tag.get('content', '')
+                if filter_word:
+                    if filter_word.lower() in content.lower():
+                        return content
+                else:
+                    # Se não tem filtro, retorna o primeiro que não seja vazio
+                    if content and len(content) > 3:
+                        return content
+        return None
+
+    def _extract_from_dspace_angular(self, soup, keywords):
+        """Extrai dados de estruturas DSpace 7+ (Header + Body divs)."""
+        # Procura por headers que contenham as palavras-chave
+        headers = soup.find_all(['h2', 'h3', 'h4', 'h5', 'h6'], class_=lambda x: x and 'header' in x)
+        
+        for header in headers:
+            header_text = header.get_text().strip().lower()
+            if any(k in header_text for k in keywords):
+                # O valor geralmente está em uma div irmã ou próxima com class '...body'
+                # Sobe para o pai e procura o body
+                parent = header.find_parent()
+                if parent:
+                    body = parent.find(class_=lambda x: x and 'body' in x)
+                    if body:
+                        return body.get_text(" ", strip=True)
+        return None
+
+    def _extract_from_tables(self, soup, keywords):
+        """Varre tabelas procurando chaves nas células de rótulo."""
+        # Procura células que pareçam rótulos (terminam com : ou têm classe label)
+        cells = soup.find_all(['td', 'th'])
+        for cell in cells:
+            text = cell.get_text(" ", strip=True).lower()
+            # Verifica se contém a keyword e é curto o suficiente para ser um label (ex: "Programa:")
+            if any(k in text for k in keywords) and len(text) < 50:
+                # O valor é geralmente a próxima célula
+                next_cell = cell.find_next_sibling(['td', 'th'])
+                if next_cell:
+                    return next_cell.get_text(" ", strip=True)
+        return None
+
+    def _extract_program_from_breadcrumbs(self, soup):
+        """Tenta achar o programa em listas de navegação (ul/ol class breadcrumb)."""
+        # Procura por qualquer lista que tenha 'breadcrumb' na classe ou id
+        trails = soup.find_all(['ul', 'ol', 'nav'], class_=lambda x: x and 'breadcrumb' in x)
+        
+        for trail in trails:
+            links = trail.find_all('li') # Itens da lista
+            if not links:
+                links = trail.find_all('a') # Ou links diretos
+                
+            # Geralmente o programa está no penúltimo ou antepenúltimo item
+            # Ex: Home > Teses > Programa X > Item
+            if len(links) >= 2:
+                # Itera de trás para frente, ignorando o último (que é o título do item)
+                for i in range(len(links)-2, -1, -1):
+                    txt = links[i].get_text(strip=True)
+                    # Validação heurística para ver se parece um programa
+                    if ("programa" in txt.lower() or "mestrado" in txt.lower() or 
+                        "doutorado" in txt.lower() or "pós-graduação" in txt.lower() or 
+                        "direito" in txt.lower()): # Adicionado 'direito' para o caso Mackenzie
+                        return txt
+        return None
+
+    def _infer_sigla(self, univ_nome):
+        """Deduz a sigla a partir do nome da universidade."""
+        if not univ_nome or univ_nome == "Não identificada": return "-"
+        
+        nome = univ_nome.upper()
+        
+        # 1. Mapa manual (Prioridade Alta)
+        mapa = {
+            "UNIVERSIDADE DE SÃO PAULO": "USP",
+            "UNIVERSIDADE ESTADUAL PAULISTA": "UNESP",
+            "UNIVERSIDADE ESTADUAL DE CAMPINAS": "UNICAMP",
+            "UNIVERSIDADE FEDERAL DE SANTA CATARINA": "UFSC",
+            "UNIVERSIDADE FEDERAL DE GOIÁS": "UFG", # Adicionado
+            "UNIVERSIDADE FEDERAL DE MINAS GERAIS": "UFMG",
+            "UNIVERSIDADE FEDERAL DO RIO DE JANEIRO": "UFRJ",
+            "UNIVERSIDADE FEDERAL DO RIO GRANDE DO SUL": "UFRGS",
+            "UNIVERSIDADE DE BRASÍLIA": "UnB",
+            "UNIVERSIDADE ESTADUAL DA PARAÍBA": "UEPB", # Adicionado
+            "UNIVERSIDADE PRESBITERIANA MACKENZIE": "MACKENZIE", # Adicionado
+            "PONTIFÍCIA UNIVERSIDADE CATÓLICA": "PUC", # Genérico
+            "FUNDAÇÃO GETULIO VARGAS": "FGV"
+        }
+
     def extract_univ_data(self):
-        """Extrai Sigla e Univ usando a Fábrica em /services."""
+        """Extrai Sigla, Univ e Programa delegando para a ParserFactory."""
         if not hasattr(self, 'selected_research'): 
             self._log("Selecione uma pesquisa na tabela primeiro.", "yellow")
             return
@@ -269,46 +374,39 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         title = self.selected_research["title"]
         author = self.selected_research["author"]
         
-        # Recupera URL e HTML da PPR do banco
-        # (Certifique-se que get_ppr_full_content foi adicionado ao DatabaseModel conforme passo anterior)
+        # Busca o HTML salvo no banco
         url, html = self.db.get_ppr_full_content(title, author)
         
         if html and url:
             try:
-                # Importação atualizada para a pasta services
+                # Importa a Factory
                 from services.parser_factory import ParserFactory
                 
-                # Instancia a Factory
                 factory = ParserFactory()
+                
+                # A Factory analisa o HTML e devolve DSpaceParser ou VufindParser
                 parser = factory.get_parser(url, html_content=html)
                 
-                self._log(f"Parser selecionado: {parser.__class__.__name__}", "yellow")
+                self._log(f"Parser identificado: {parser.__class__.__name__}", "yellow")
 
-                # Extração via método padronizado
-                data = parser.extract_pure_soup(html, url, on_progress=self._log)
+                # O Parser faz todo o trabalho sujo
+                data = parser.extract(html, url)
                 
-                # --- DEBUG NO CONSOLE (Para você verificar) ---
-                print("------------------------------------------------")
-                print(f"DADOS EXTRAÍDOS: {data}")
-                print(f"Título Alvo: {title}")
-                print(f"Autor Alvo: {author}")
-                print("------------------------------------------------")
-
+                # Recupera os dados retornados (com valores padrão se vazio)
                 sigla = data.get('sigla', '-')
-                nome_univ = data.get('universidade', '-')
+                univ = data.get('universidade', 'Não identificada')
+                programa = data.get('programa', 'Não identificado')
 
-                # CORREÇÃO PRINCIPAL AQUI:
-                # 1. O nome do método no DatabaseModel é 'update_univ_data'
-                # 2. Sua tabela não tem campo 'programa' ainda, então enviamos apenas sigla e nome
-                self.db.update_univ_data(title, author, sigla, nome_univ)
+                # Atualiza no banco
+                self.db.update_univ_data(title, author, sigla, univ, programa)
                 
-                self._log(f"Sucesso: Dados gravados (Sigla: {sigla})", "green")
+                self._log(f"Sucesso: {sigla} | {programa[:30]}...", "green")
                 
-                # Recarrega a tabela na interface para mostrar a nova coluna
-                self.initialize_data() 
+                # Atualiza a UI
+                self.initialize_data()
                 
             except Exception as e:
-                self._log(f"Erro durante a extração/gravação: {e}", "red")
-                print(f"Erro detalhado: {e}") # Ajuda a ver erros escondidos no console
+                self._log(f"Erro na extração: {e}", "red")
+                print(f"Erro detalhado: {e}") # Debug
         else:
-            self._log("Erro: Conteúdo PPR não encontrado para extração.", "red")
+            self._log("Erro: Conteúdo PPR não encontrado (execute o scrap primeiro).", "red")

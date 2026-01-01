@@ -1,74 +1,6 @@
 import sqlite3
 
 class DatabaseModel:
-    def __init__(self, db_name="database.db"):
-        self.db_name = db_name
-        self._init_db()
-
-    def _init_db(self):
-        """Inicializa o banco de dados com a estrutura relacional e modo WAL."""
-        with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
-            conn.execute("PRAGMA journal_mode=WAL;")
-            cursor = conn.cursor()
-            
-            # 1. Tabela para as Páginas de Listagem do Buscador (PLB)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS plb (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url TEXT NOT NULL,
-                    html_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            
-            # 2. Tabela para os Metadados das Pesquisas (Minerados das PLBs)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS pesquisas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    author TEXT,
-                    ppb_link TEXT UNIQUE,
-                    ppr_link TEXT,
-                    univ_sigla TEXT,
-                    univ_nome TEXT,
-                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            # 3. Tabela para os Códigos HTML das Páginas de Pesquisa (PPB)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS ppb (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pesquisa_id INTEGER,
-                    url TEXT NOT NULL,
-                    html_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
-                )
-            """)
-
-            # 4. Tabela de Logs
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    message TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            # 5. Tabela PPR
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS ppr (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pesquisa_id INTEGER,
-                    url TEXT NOT NULL,
-                    html_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
-                )
-            """)
-            conn.commit()
-
     def save_ppb_content(self, url, html_content):
         """Grava o HTML da PPB relacionado à linha correspondente em pesquisas."""
         with sqlite3.connect(self.db_name) as conn:
@@ -125,24 +57,6 @@ class DatabaseModel:
                     VALUES (?, ?, ?, ?)
                 """, (item.get('title'), item.get('author'), item.get('ppb_link'), item.get('ppr_link')))
             conn.commit()
-
-    # ESTA É A FUNÇÃO QUE O ERRO DIZIA ESTAR FALTANDO
-    # Certifique-se de que a indentação (espaços à esquerda) está alinhada com as outras funções
-    def get_all_pesquisas(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            # Adicionei univ_sigla e univ_nome para o retorno ser mais completo, se necessário
-            cursor.execute("SELECT title, author, ppb_link, ppr_link, univ_sigla, univ_nome FROM pesquisas ORDER BY extracted_at DESC")
-            return [
-                {
-                    'title': r[0], 
-                    'author': r[1], 
-                    'ppb_link': r[2], 
-                    'ppr_link': r[3],
-                    'univ_sigla': r[4],
-                    'univ_nome': r[5]
-                } for r in cursor.fetchall()
-            ]
 
     def save_plb(self, url, html_content):
         try:
@@ -215,16 +129,119 @@ class DatabaseModel:
         except sqlite3.Error as e:
             raise Exception(f"Erro na consulta SQL (PPR Full): {e}")
 
-    def update_univ_data(self, title, author, sigla, nome):
-        """Armazena a sigla e o nome da universidade extraídos."""
+    def __init__(self, db_name="database.db"):
+        self.db_name = db_name
+        self._init_db()
+        self._check_and_migrate() # Adicionado para garantir que a coluna exista em bancos antigos
+
+    def _init_db(self):
+        """Inicializa o banco de dados com a estrutura relacional e modo WAL."""
+        with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            cursor = conn.cursor()
+            
+            # 1. Tabela PLB (Mantida igual)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS plb (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    html_content TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # 2. Tabela Pesquisas (Atualizada com campo 'programa')
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pesquisas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    author TEXT,
+                    ppb_link TEXT UNIQUE,
+                    ppr_link TEXT,
+                    univ_sigla TEXT,
+                    univ_nome TEXT,
+                    programa TEXT,
+                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 3. Tabela PPB (Mantida igual)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ppb (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pesquisa_id INTEGER,
+                    url TEXT NOT NULL,
+                    html_content TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
+                )
+            """)
+
+            # 4. Tabela Logs (Mantida igual)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 5. Tabela PPR (Mantida igual)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ppr (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pesquisa_id INTEGER,
+                    url TEXT NOT NULL,
+                    html_content TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
+                )
+            """)
+            conn.commit()
+            # Tenta migrar caso o banco já exista sem a coluna
+            self._check_and_migrate()
+
+    def _check_and_migrate(self):
+        """Verifica se a coluna 'programa' existe e a cria se necessário."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(pesquisas)")
+                columns = [info[1] for info in cursor.fetchall()]
+                
+                if 'programa' not in columns:
+                    cursor.execute("ALTER TABLE pesquisas ADD COLUMN programa TEXT")
+                    conn.commit()
+        except sqlite3.Error as e:
+            print(f"Erro na migração do banco: {e}")
+
+    def get_all_pesquisas(self):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            # Adicionado campo 'programa' na query
+            cursor.execute("SELECT title, author, ppb_link, ppr_link, univ_sigla, univ_nome, programa FROM pesquisas ORDER BY extracted_at DESC")
+            return [
+                {
+                    'title': r[0], 
+                    'author': r[1], 
+                    'ppb_link': r[2], 
+                    'ppr_link': r[3],
+                    'univ_sigla': r[4],
+                    'univ_nome': r[5],
+                    'programa': r[6]
+                } for r in cursor.fetchall()
+            ]
+
+    def update_univ_data(self, title, author, sigla, nome, programa):
+        """Armazena a sigla, nome da universidade e programa extraídos."""
         try:
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     UPDATE pesquisas 
-                    SET univ_sigla = ?, univ_nome = ?
+                    SET univ_sigla = ?, univ_nome = ?, programa = ?
                     WHERE title = ? AND author = ?
-                """, (sigla, nome, title, author))
+                """, (sigla, nome, programa, title, author))
                 conn.commit()
         except sqlite3.Error as e:
             raise Exception(f"Erro ao atualizar dados da universidade: {e}")
