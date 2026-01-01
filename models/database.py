@@ -56,6 +56,7 @@ class DatabaseModel:
                 )
             """)
 
+            # 5. Tabela PPR
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ppr (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -125,11 +126,23 @@ class DatabaseModel:
                 """, (item.get('title'), item.get('author'), item.get('ppb_link'), item.get('ppr_link')))
             conn.commit()
 
+    # ESTA É A FUNÇÃO QUE O ERRO DIZIA ESTAR FALTANDO
+    # Certifique-se de que a indentação (espaços à esquerda) está alinhada com as outras funções
     def get_all_pesquisas(self):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT title, author, ppb_link, ppr_link FROM pesquisas ORDER BY extracted_at DESC")
-            return [{'title': r[0], 'author': r[1], 'ppb_link': r[2], 'ppr_link': r[3]} for r in cursor.fetchall()]
+            # Adicionei univ_sigla e univ_nome para o retorno ser mais completo, se necessário
+            cursor.execute("SELECT title, author, ppb_link, ppr_link, univ_sigla, univ_nome FROM pesquisas ORDER BY extracted_at DESC")
+            return [
+                {
+                    'title': r[0], 
+                    'author': r[1], 
+                    'ppb_link': r[2], 
+                    'ppr_link': r[3],
+                    'univ_sigla': r[4],
+                    'univ_nome': r[5]
+                } for r in cursor.fetchall()
+            ]
 
     def save_plb(self, url, html_content):
         try:
@@ -181,6 +194,26 @@ class DatabaseModel:
                 return result[0] if result else None
         except sqlite3.Error as e:
             raise Exception(f"Erro na consulta SQL (PPR): {e}")
+
+    def get_ppr_full_content(self, title, author):
+        """
+        Retorna (URL, HTML) da tabela PPR baseado no título e autor.
+        Usado pelo main_viewmodel.py linha 273.
+        """
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT r.url, r.html_content 
+                    FROM ppr r
+                    JOIN pesquisas p ON r.pesquisa_id = p.id
+                    WHERE p.title = ? AND p.author = ?
+                """, (title, author))
+                result = cursor.fetchone()
+                # Retorna (url, html) se achar, ou (None, None) se não achar
+                return result if result else (None, None)
+        except sqlite3.Error as e:
+            raise Exception(f"Erro na consulta SQL (PPR Full): {e}")
 
     def update_univ_data(self, title, author, sigla, nome):
         """Armazena a sigla e o nome da universidade extraídos."""

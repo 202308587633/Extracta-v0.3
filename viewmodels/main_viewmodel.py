@@ -249,35 +249,66 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         self.on_tab_changed()
 
     def delete_history_item(self):
-        """Remove um item e limpa a visualização."""
+        """Remove um item do histórico e limpa a visualização."""
         if not self.current_history_id: return
         try:
             self.db.delete_history(self.current_history_id)
+            self._log(f"Atividade: Item {self.current_history_id} excluído.", "green")
             self.current_history_id = None
-            # CORREÇÃO: Removida a repetição de 'self.view'
             self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
             self.load_history_list()
         except Exception as e:
-            self._log(f"Erro na exclusão: {e}", "red")
+            self._log(f"Erro Crítico: {e}", "red")
 
     def extract_univ_data(self):
-        """Extrai Sigla e Nome da Universidade do HTML da PPR salvo."""
-        if not hasattr(self, 'selected_research'): return
+        """Extrai Sigla e Univ usando a Fábrica em /services."""
+        if not hasattr(self, 'selected_research'): 
+            self._log("Selecione uma pesquisa na tabela primeiro.", "yellow")
+            return
         
         title = self.selected_research["title"]
         author = self.selected_research["author"]
-        html = self.db.get_ppr_html(title, author)
         
-        if html:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(html, 'html.parser')
-            # Exemplo de extração (ajuste seletores conforme o site alvo)
-            sigla = soup.select_one('.sigla-classe').text.strip() if soup.select_one('.sigla-classe') else "N/D"
-            nome = soup.select_one('.nome-classe').text.strip() if soup.select_one('.nome-classe') else "Não encontrada"
-            
-            self.db.update_univ_data(title, author, sigla, nome)
-            self._log(f"Dados da universidade extraídos para: {sigla}", "green")
-            
-            # Recarrega a tabela na interface diretamente
-            all_results = self.db.get_all_pesquisas()
-            self.view.after_thread_safe(lambda: self.view.results_tab.display_results(all_results))
+        # Recupera URL e HTML da PPR do banco
+        # (Certifique-se que get_ppr_full_content foi adicionado ao DatabaseModel conforme passo anterior)
+        url, html = self.db.get_ppr_full_content(title, author)
+        
+        if html and url:
+            try:
+                # Importação atualizada para a pasta services
+                from services.parser_factory import ParserFactory
+                
+                # Instancia a Factory
+                factory = ParserFactory()
+                parser = factory.get_parser(url, html_content=html)
+                
+                self._log(f"Parser selecionado: {parser.__class__.__name__}", "yellow")
+
+                # Extração via método padronizado
+                data = parser.extract_pure_soup(html, url, on_progress=self._log)
+                
+                # --- DEBUG NO CONSOLE (Para você verificar) ---
+                print("------------------------------------------------")
+                print(f"DADOS EXTRAÍDOS: {data}")
+                print(f"Título Alvo: {title}")
+                print(f"Autor Alvo: {author}")
+                print("------------------------------------------------")
+
+                sigla = data.get('sigla', '-')
+                nome_univ = data.get('universidade', '-')
+
+                # CORREÇÃO PRINCIPAL AQUI:
+                # 1. O nome do método no DatabaseModel é 'update_univ_data'
+                # 2. Sua tabela não tem campo 'programa' ainda, então enviamos apenas sigla e nome
+                self.db.update_univ_data(title, author, sigla, nome_univ)
+                
+                self._log(f"Sucesso: Dados gravados (Sigla: {sigla})", "green")
+                
+                # Recarrega a tabela na interface para mostrar a nova coluna
+                self.initialize_data() 
+                
+            except Exception as e:
+                self._log(f"Erro durante a extração/gravação: {e}", "red")
+                print(f"Erro detalhado: {e}") # Ajuda a ver erros escondidos no console
+        else:
+            self._log("Erro: Conteúdo PPR não encontrado para extração.", "red")

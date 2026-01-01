@@ -215,12 +215,13 @@ class ResultsTab(ctk.CTkFrame):
             self.tree.delete(item)
 
         for item in results:
-            # Exibe Sigla e Nome nas colunas finais
+            # Injeção dos dados académicos incluindo o Programa
             values = (
                 item.get('title'), 
                 item.get('author'), 
                 item.get('univ_sigla', '-'), 
-                item.get('univ_nome', 'Pendente...')
+                item.get('univ_nome', 'Pendente...'),
+                item.get('programa', '-') 
             )
             item_id = self.tree.insert("", "end", values=values)
             self.link_map[item_id] = {'search': item.get('ppb_link'), 'repo': item.get('ppr_link')}
