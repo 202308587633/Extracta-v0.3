@@ -44,18 +44,18 @@ class ResultsTab(ctk.CTkFrame):
         style.map("Treeview.Heading",
                   background=[('active', '#343638')])
 
-        columns = ("title", "author", "ppb", "lap")
+        columns = ("title", "author", "sigla", "universidade")
         self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="browse")
 
         self.tree.heading("title", text="Nome da Pesquisa")
         self.tree.heading("author", text="Autor")
-        self.tree.heading("ppb", text="Link PPB")
-        self.tree.heading("lap", text="Link LAP")
+        self.tree.heading("sigla", text="Sigla")
+        self.tree.heading("universidade", text="Universidade")
 
         self.tree.column("title", width=400, minwidth=150, anchor="w")
         self.tree.column("author", width=200, minwidth=100, anchor="w")
-        self.tree.column("ppb", width=120, anchor="center")
-        self.tree.column("lap", width=120, anchor="center")
+        self.tree.column("sigla", width=80, anchor="center")
+        self.tree.column("universidade", width=250, anchor="w")
 
         self.scrollbar = ctk.CTkScrollbar(self.container, command=self.tree.yview)
         self.tree.configure(yscrollcommand=self.scrollbar.set)
@@ -87,22 +87,6 @@ class ResultsTab(ctk.CTkFrame):
             self.on_scrape_callback(links['search'])
         else:
             print("Nenhum link de busca disponível para esta linha.")
-
-    def display_results(self, results):
-        self.link_map.clear()
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
-        self.label_count.configure(text=f"{len(results)} registros encontrados (Duplo clique para abrir links)")
-
-        for item in results:
-            values = (item.get('title'), item.get('author'), "Abrir PPB", "Abrir LAP")
-            item_id = self.tree.insert("", "end", values=values)
-
-            self.link_map[item_id] = {
-                'search': item.get('ppb_link'),
-                'repo': item.get('ppr_link') # Alterado aqui
-            }
 
     def _sort_column(self, col, reverse):
         l = [(self.tree.set(k, col), k) for k in self.tree.get_children('')]
@@ -207,6 +191,8 @@ class ResultsTab(ctk.CTkFrame):
         self.context_menu.add_separator()
         self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
         self.context_menu.add_command(label="🌍 Abrir PPR no Navegador", command=self._view_ppr_browser)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (via PPR)", command=self.viewmodel.extract_univ_data)
 
     def _view_ppr_browser(self):
         """Recupera o HTML da PPR do banco e abre no navegador"""
@@ -222,3 +208,19 @@ class ResultsTab(ctk.CTkFrame):
         
         # Chama a função unificada no ViewModel para abrir a PPR
         self.viewmodel.open_ppr_in_browser()
+
+    def display_results(self, results):
+        self.link_map.clear()
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        for item in results:
+            # Exibe Sigla e Nome nas colunas finais
+            values = (
+                item.get('title'), 
+                item.get('author'), 
+                item.get('univ_sigla', '-'), 
+                item.get('univ_nome', 'Pendente...')
+            )
+            item_id = self.tree.insert("", "end", values=values)
+            self.link_map[item_id] = {'search': item.get('ppb_link'), 'repo': item.get('ppr_link')}

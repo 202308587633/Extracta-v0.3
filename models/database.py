@@ -28,10 +28,12 @@ class DatabaseModel:
                     title TEXT,
                     author TEXT,
                     ppb_link TEXT UNIQUE,
-                    ppr_link TEXT, -- Alterado de lap_link para ppr_link
+                    ppr_link TEXT,
+                    univ_sigla TEXT,
+                    univ_nome TEXT,
                     extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
+                )
+            """)
 
             # 3. Tabela para os Códigos HTML das Páginas de Pesquisa (PPB)
             cursor.execute("""
@@ -179,3 +181,17 @@ class DatabaseModel:
                 return result[0] if result else None
         except sqlite3.Error as e:
             raise Exception(f"Erro na consulta SQL (PPR): {e}")
+
+    def update_univ_data(self, title, author, sigla, nome):
+        """Armazena a sigla e o nome da universidade extraídos."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE pesquisas 
+                    SET univ_sigla = ?, univ_nome = ?
+                    WHERE title = ? AND author = ?
+                """, (sigla, nome, title, author))
+                conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro ao atualizar dados da universidade: {e}")

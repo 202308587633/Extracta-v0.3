@@ -213,21 +213,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         html = self.db.get_ppr_html(title, author)
         self._open_html_string_in_browser(html)
 
-    def delete_history_item(self):
-        """Remove um item do histórico e limpa a visualização da aba."""
-        if not self.current_history_id: 
-            self._log("Tentativa de exclusão sem seleção.", "yellow")
-            return
-        try:
-            self.db.delete_history(self.current_history_id)
-            self._log(f"Atividade: Item {self.current_history_id} excluído do banco de dados.", "green")
-            self.current_history_id = None
-            # CORREÇÃO: Removida a repetição de self.view e acessada a aba diretamente
-            self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
-            self.load_history_list()
-        except Exception as e:
-            self._log(f"Erro Crítico na exclusão: {e}", "red")
-
     def check_pagination_and_scrape(self):
         """Detecta e inicia a raspagem de páginas subsequentes."""
         if not self.current_history_id: return
@@ -262,3 +247,37 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         
         # Força a atualização imediata caso o usuário já esteja na aba
         self.on_tab_changed()
+
+    def delete_history_item(self):
+        """Remove um item e limpa a visualização."""
+        if not self.current_history_id: return
+        try:
+            self.db.delete_history(self.current_history_id)
+            self.current_history_id = None
+            # CORREÇÃO: Removida a repetição de 'self.view'
+            self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
+            self.load_history_list()
+        except Exception as e:
+            self._log(f"Erro na exclusão: {e}", "red")
+
+    def extract_univ_data(self):
+        """Extrai Sigla e Nome da Universidade do HTML da PPR salvo."""
+        if not hasattr(self, 'selected_research'): return
+        
+        title = self.selected_research["title"]
+        author = self.selected_research["author"]
+        html = self.db.get_ppr_html(title, author)
+        
+        if html:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
+            # Exemplo de extração (ajuste seletores conforme o site alvo)
+            sigla = soup.select_one('.sigla-classe').text.strip() if soup.select_one('.sigla-classe') else "N/D"
+            nome = soup.select_one('.nome-classe').text.strip() if soup.select_one('.nome-classe') else "Não encontrada"
+            
+            self.db.update_univ_data(title, author, sigla, nome)
+            self._log(f"Dados da universidade extraídos para: {sigla}", "green")
+            
+            # Recarrega a tabela na interface diretamente
+            all_results = self.db.get_all_pesquisas()
+            self.view.after_thread_safe(lambda: self.view.results_tab.display_results(all_results))
