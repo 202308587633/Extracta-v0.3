@@ -10,21 +10,7 @@ import tempfile
 import webbrowser
 from urllib.parse import urlparse 
 
-
 class MainViewModel: # Certifique-se de que o nome da classe está correto
-    def __init__(self, view):
-        self.view = view
-        self.db = DatabaseModel(db_name=config.DB_NAME)
-        self.scraper = ScraperModel()
-        self.current_history_id = None
-
-    def start_scraping_command(self):
-        url = self.view.get_url_input()
-        if not url: return
-        self.view.toggle_button(False)
-        thread = threading.Thread(target=self._run_task, args=(url,))
-        thread.start()
-
     def scrape_specific_search_url(self, url):
         self._log(f"Iniciando scrap de busca: {url}", "yellow")
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'buscador'))
@@ -35,19 +21,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         self._log(f"Iniciando scrap do repositório: {url}", "yellow")
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
         thread.start()
-
-    def _log(self, message, color="white"):
-        """
-        Centraliza todos os logs: 
-        1. Persiste a mensagem no Banco de Dados
-        2. Atualiza a Barra de Status global na interface
-        3. Registra a atividade na aba de Logs
-        """
-        try:
-            self.db.save_log(message)
-        except:
-            pass
-        self.view.update_status(message, color)
 
     def _run_pagination_task(self, base_url, max_page):
         """Executa o DeepScrap de PLBs: percorre e salva todas as páginas de listagem na tabela 'plb'"""
@@ -87,17 +60,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         items = self.db.get_plb_list() 
         # Acesso direto ao método update_list da history_tab
         self.view.after_thread_safe(lambda: self.view.history_tab.update_list(items))
-
-    def initialize_data(self):
-        """Carrega PLBs e pesquisas mineradas na inicialização"""
-        self.load_history_list()
-        try:
-            saved_data = self.db.get_all_pesquisas() 
-            if saved_data:
-                # Acesso direto à results_tab
-                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
-        except Exception as e:
-            self._log(f"Erro ao carregar dados salvos: {e}", "red")
 
     def extract_data_command(self):
         """Extrai dados tratando possíveis falhas no banco ou no parser"""
@@ -382,77 +344,89 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         else:
             self._log("Erro: Conteúdo PPR não encontrado (execute o scrap primeiro).", "red")
 
-    def scrape_pending_pprs(self):
-        """Inicia o processo de raspagem de todas as PPRs pendentes em background."""
-        pending = self.db.get_pending_ppr_records()
-        
-        if not pending:
-            self._log("Todas as PPRs listadas já possuem HTML salvo.", "green")
-            return
-
-        self._log(f"Iniciando download em lote de {len(pending)} PPRs pendentes...", "yellow")
-        
-        # Inicia em thread separada para manter a UI responsiva
-        thread = threading.Thread(target=self._run_batch_ppr_scraping, args=(pending,))
-        thread.start()
-    
-    def _extract_root_url(self, url):
-        """Extrai a raiz da URL (ex: https://repositorio.ucs.br/xyz -> repositorio.ucs.br)"""
-        try:
-            parsed = urlparse(url)
-            return parsed.netloc
-        except:
-            return "url-invalida"
-            
     def _update_source_ui(self, url, success):
         """Atualiza a aba de Fontes na interface"""
         root = self._extract_root_url(url)
         self.view.update_source_status(root, success)
 
-    def _run_specific_scraping_task(self, url, doc_type='buscador'):
-        try:
-            html = self.scraper.fetch_html(url)
-            
-            if doc_type == 'buscador':
-                self.db.save_ppb_content(url, html)
-                self._log(f"PPB capturada e vinculada com sucesso.", "green")
-            else:
-                self.db.save_ppr_content(url, html)
-                self._log(f"Conteúdo do repositório (PPR) salvo e vinculado.", "green")
-                
-            # ATUALIZAÇÃO SUCESSO
-            self._update_source_ui(url, True)
-            
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            # ATUALIZAÇÃO FALHA
-            self._update_source_ui(url, False)
-            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
+    def __init__(self, view):
+        self.view = view
+        self.db = DatabaseModel(db_name=config.DB_NAME)
+        self.scraper = ScraperModel()
+        self.current_history_id = None
 
-    def _run_task(self, url):
-        """Executa o scrap inicial (Início)"""
+    def initialize_data(self):
+        """Carrega dados iniciais: PLBs, Pesquisas e agora as FONTES salvas."""
+        self.load_history_list()
+        
+        # 1. Carrega Fontes salvas e atualiza a aba
         try:
-            html = self.scraper.fetch_html(url)
-            self.db.save_plb(url, html)
-            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
-            self.view.after_thread_safe(self.load_history_list)
-            
-            # ATUALIZAÇÃO SUCESSO
-            self._update_source_ui(url, True)
-            self._log("PLB capturada e salva com sucesso.", "green")
+            sources = self.db.get_all_sources()
+            for root, status in sources.items():
+                # Atualiza a UI sem salvar no banco novamente (pois já veio de lá)
+                self.view.update_source_status(root, status)
         except Exception as e:
-            # ATUALIZAÇÃO FALHA
-            self._update_source_ui(url, False)
-            self._log(str(e), "red")
-        finally:
-            self.view.toggle_button(True)
-    
+            self._log(f"Erro ao carregar fontes: {e}", "red")
+
+        # 2. Carrega Resultados
+        try:
+            saved_data = self.db.get_all_pesquisas() 
+            if saved_data:
+                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
+        except Exception as e:
+            self._log(f"Erro ao carregar dados salvos: {e}", "red")
+
+    def _extract_root_url(self, url):
+        try:
+            parsed = urlparse(url)
+            # Retorna netloc (ex: repositorio.ucs.br) e remove porta se houver
+            return parsed.netloc.split(':')[0]
+        except:
+            return "url-invalida"
+
+    def _update_source_ui_and_db(self, url, success):
+        """Atualiza a UI e Persiste o status no Banco."""
+        root = self._extract_root_url(url)
+        
+        # 1. Salva no Banco
+        self.db.save_source_status(root, success)
+        
+        # 2. Atualiza a UI
+        self.view.update_source_status(root, success)
+
+    def scrape_pending_pprs(self):
+        """Inicia o processo de raspagem em lote."""
+        pending = self.db.get_pending_ppr_records()
+        if not pending:
+            self._log("Todas as PPRs listadas já possuem HTML salvo.", "green")
+            return
+
+        self._log(f"Iniciando download em lote de {len(pending)} PPRs pendentes...", "yellow")
+        thread = threading.Thread(target=self._run_batch_ppr_scraping, args=(pending,))
+        thread.start()
+
     def _run_batch_ppr_scraping(self, pending_list):
-        """(Método adicionado na etapa anterior - Atualizado para suportar a aba Fontes)"""
+        """
+        Executa o download sequencial.
+        REGRA: Só baixa se a raiz não estiver marcada como Falha (unchecked) na guia Fontes.
+        """
         total = len(pending_list)
         success_count = 0
+        skipped_count = 0
         
         for index, (pid, url) in enumerate(pending_list):
+            root = self._extract_root_url(url)
+            
+            # --- VERIFICAÇÃO DE PERMISSÃO ---
+            # Verifica no banco se essa raiz está permitida (True) ou bloqueada (False)
+            is_allowed = self.db.get_source_status(root)
+            
+            if not is_allowed:
+                self._log(f"Pulando {root} (Marcada como inativa/falha na guia Fontes).", "yellow")
+                skipped_count += 1
+                continue
+            # -------------------------------
+
             try:
                 self._log(f"Baixando ({index + 1}/{total}): {url}", "yellow")
                 html = self.scraper.fetch_html(url)
@@ -460,17 +434,79 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
                 if html:
                     self.db.save_ppr_content(url, html)
                     success_count += 1
-                    # SUCESSO NA ABA FONTES
-                    self._update_source_ui(url, True)
+                    # Sucesso: Garante que está marcado como True
+                    self._update_source_ui_and_db(url, True)
                 else:
-                    # FALHA (HTML VAZIO)
-                    self._update_source_ui(url, False)
+                    raise Exception("HTML vazio retornado")
                 
-                time.sleep(1.0)
+                time.sleep(1.0) # Crawling educado
                 
             except Exception as e:
-                # FALHA (EXCEÇÃO)
-                self._update_source_ui(url, False)
+                # FALHA NO DOWNLOAD
                 self._log(f"Falha ao baixar {url}: {e}", "red")
+                
+                # REQUISITO: Desmarcar a caixa na guia Fontes
+                # Isso bloqueará futuras tentativas para este domínio nesta execução e nas próximas
+                self._update_source_ui_and_db(url, False) 
+                
+                # "Reiniciar o processo" = O loop continua, mas agora o get_source_status(root)
+                # retornará False para as próximas URLs desse mesmo domínio, efetivamente pulando-as.
 
-        self._log(f"Lote concluído! {success_count}/{total} PPRs novas baixadas.", "green")
+        self._log(f"Lote concluído! {success_count} baixados, {skipped_count} pulados.", "green")
+        
+        # Recarrega a tabela de resultados para mostrar se houve novos dados (opcional)
+        self.initialize_data()
+    
+    def _log(self, message, color="white"):
+        try:
+            self.db.save_log(message)
+        except:
+            pass
+        self.view.update_status(message, color)
+
+    def load_history_list(self):
+        items = self.db.get_plb_list() 
+        self.view.after_thread_safe(lambda: self.view.history_tab.update_list(items))
+    
+    def start_scraping_command(self):
+        url = self.view.get_url_input()
+        if not url: return
+        self.view.toggle_button(False)
+        thread = threading.Thread(target=self._run_task, args=(url,))
+        thread.start()
+
+    def _run_task(self, url):
+        try:
+            html = self.scraper.fetch_html(url)
+            self.db.save_plb(url, html)
+            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
+            self.view.after_thread_safe(self.load_history_list)
+            
+            # Atualiza fonte com sucesso
+            self._update_source_ui_and_db(url, True)
+            self._log("PLB capturada e salva com sucesso.", "green")
+        except Exception as e:
+            # Atualiza fonte com falha
+            self._update_source_ui_and_db(url, False)
+            self._log(str(e), "red")
+        finally:
+            self.view.toggle_button(True)
+    
+    def _run_specific_scraping_task(self, url, doc_type='buscador'):
+        try:
+            html = self.scraper.fetch_html(url)
+            if doc_type == 'buscador':
+                self.db.save_ppb_content(url, html)
+            else:
+                self.db.save_ppr_content(url, html)
+            
+            self._update_source_ui_and_db(url, True)
+            self.view.after_thread_safe(self.load_history_list)
+            self._log(f"{doc_type.upper()} capturado.", "green")
+        except Exception as e:
+            self._update_source_ui_and_db(url, False)
+            self._log(f"Erro em {doc_type}: {e}", "red")
+
+    def toggle_source_manually(self, root_url, new_status):
+        self.db.save_source_status(root_url, new_status)
+        self._log(f"Fonte {root_url} alterada manualmente para {new_status}", "white")
