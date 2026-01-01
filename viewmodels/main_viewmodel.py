@@ -8,6 +8,8 @@ import config
 import os
 import tempfile
 import webbrowser
+from urllib.parse import urlparse 
+
 
 class MainViewModel: # Certifique-se de que o nome da classe está correto
     def __init__(self, view):
@@ -80,24 +82,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         
         self.view.after_thread_safe(lambda: self.view.history_tab.display_content(html))    
 
-    def _run_specific_scraping_task(self, url, doc_type='buscador'):
-        """Versão corrigida para gravar PPB na tabela ppb e PPR na tabela ppr"""
-        try:
-            html = self.scraper.fetch_html(url)
-            
-            if doc_type == 'buscador':
-                # Salva na tabela 'ppb' vinculada à pesquisa correspondente
-                self.db.save_ppb_content(url, html)
-                self._log(f"PPB capturada e vinculada com sucesso.", "green")
-            else:
-                # CORREÇÃO: Salva na tabela 'ppr' vinculada à pesquisa
-                self.db.save_ppr_content(url, html)
-                self._log(f"Conteúdo do repositório (PPR) salvo e vinculado.", "green")
-                
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
-
     def load_history_list(self):
         """Carrega da tabela 'plb' e atualiza a lista diretamente na aba"""
         items = self.db.get_plb_list() 
@@ -152,19 +136,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         """Abre a PPB (Página de Pesquisa) no navegador."""
         html = self.db.get_extracted_html(title, author)
         self._open_html_string_in_browser(html)
-
-    def _run_task(self, url):
-        """Executa o scrap inicial com tratamento de erros de rede."""
-        try:
-            html = self.scraper.fetch_html(url) # Trata RequestException internamente
-            self.db.save_plb(url, html)        # Trata sqlite3.Error internamente
-            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
-            self.view.after_thread_safe(self.load_history_list)
-            self._log("PLB capturada e salva com sucesso.", "green")
-        except Exception as e:
-            self._log(str(e), "red") # Feedback preciso na barra de status
-        finally:
-            self.view.toggle_button(True)
 
     def on_tab_changed(self):
         """Atualiza o conteúdo baseado no nome exato da aba selecionada"""
@@ -424,30 +395,82 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         # Inicia em thread separada para manter a UI responsiva
         thread = threading.Thread(target=self._run_batch_ppr_scraping, args=(pending,))
         thread.start()
+    
+    def _extract_root_url(self, url):
+        """Extrai a raiz da URL (ex: https://repositorio.ucs.br/xyz -> repositorio.ucs.br)"""
+        try:
+            parsed = urlparse(url)
+            return parsed.netloc
+        except:
+            return "url-invalida"
+            
+    def _update_source_ui(self, url, success):
+        """Atualiza a aba de Fontes na interface"""
+        root = self._extract_root_url(url)
+        self.view.update_source_status(root, success)
 
+    def _run_specific_scraping_task(self, url, doc_type='buscador'):
+        try:
+            html = self.scraper.fetch_html(url)
+            
+            if doc_type == 'buscador':
+                self.db.save_ppb_content(url, html)
+                self._log(f"PPB capturada e vinculada com sucesso.", "green")
+            else:
+                self.db.save_ppr_content(url, html)
+                self._log(f"Conteúdo do repositório (PPR) salvo e vinculado.", "green")
+                
+            # ATUALIZAÇÃO SUCESSO
+            self._update_source_ui(url, True)
+            
+            self.view.after_thread_safe(self.load_history_list)
+        except Exception as e:
+            # ATUALIZAÇÃO FALHA
+            self._update_source_ui(url, False)
+            self._log(f"Erro ao raspar {doc_type}: {e}", "red")
+
+    def _run_task(self, url):
+        """Executa o scrap inicial (Início)"""
+        try:
+            html = self.scraper.fetch_html(url)
+            self.db.save_plb(url, html)
+            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
+            self.view.after_thread_safe(self.load_history_list)
+            
+            # ATUALIZAÇÃO SUCESSO
+            self._update_source_ui(url, True)
+            self._log("PLB capturada e salva com sucesso.", "green")
+        except Exception as e:
+            # ATUALIZAÇÃO FALHA
+            self._update_source_ui(url, False)
+            self._log(str(e), "red")
+        finally:
+            self.view.toggle_button(True)
+    
     def _run_batch_ppr_scraping(self, pending_list):
-        """Executa o download sequencial com logs de progresso."""
+        """(Método adicionado na etapa anterior - Atualizado para suportar a aba Fontes)"""
         total = len(pending_list)
         success_count = 0
         
         for index, (pid, url) in enumerate(pending_list):
             try:
-                # Log de progresso
                 self._log(f"Baixando ({index + 1}/{total}): {url}", "yellow")
-                
                 html = self.scraper.fetch_html(url)
                 
                 if html:
                     self.db.save_ppr_content(url, html)
                     success_count += 1
+                    # SUCESSO NA ABA FONTES
+                    self._update_source_ui(url, True)
+                else:
+                    # FALHA (HTML VAZIO)
+                    self._update_source_ui(url, False)
                 
-                # Pequena pausa para evitar bloqueio por excesso de requisições (Crawling educado)
                 time.sleep(1.0)
                 
             except Exception as e:
+                # FALHA (EXCEÇÃO)
+                self._update_source_ui(url, False)
                 self._log(f"Falha ao baixar {url}: {e}", "red")
 
         self._log(f"Lote concluído! {success_count}/{total} PPRs novas baixadas.", "green")
-        
-        # Opcional: Atualizar a lista de resultados se houver alguma indicação visual
-        self.view.after_thread_safe(lambda: self.view.results_tab.update_ui())
