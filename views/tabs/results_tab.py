@@ -147,17 +147,50 @@ class ResultsTab(ctk.CTkFrame):
         self.viewmodel.open_ppr_in_browser()
 
     def _setup_ui(self):
+        # Configuração do Grid Principal
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        # Row 0: Toolbar, Row 1: Label Info, Row 2: Tabela
+        self.grid_rowconfigure(2, weight=1)
 
-        self.label_count = ctk.CTkLabel(self, text="Aguardando dados...", font=("Roboto", 14))
-        self.label_count.grid(row=0, column=0, pady=(10, 5), sticky="ew")
+        # --- 1. Barra de Ferramentas (Novo) ---
+        self.toolbar = ctk.CTkFrame(self, fg_color="transparent")
+        self.toolbar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
 
+        # Botão de Scraping em Lote (Destaque)
+        self.btn_scrape_pending = ctk.CTkButton(
+            self.toolbar, 
+            text="⬇️ Baixar HTMLs Pendentes (PPR)", 
+            command=self.viewmodel.scrape_pending_pprs,
+            height=35,
+            fg_color="#1f538d", # Cor de destaque padrão do CTK
+            hover_color="#14375e",
+            font=("Roboto", 12, "bold")
+        )
+        self.btn_scrape_pending.pack(side="left", padx=(0, 10))
+
+        # Botão de Atualizar (Opcional, útil para recarregar dados do banco)
+        self.btn_refresh = ctk.CTkButton(
+            self.toolbar,
+            text="🔄 Atualizar Tabela",
+            command=lambda: self.viewmodel.initialize_data(),
+            height=35,
+            fg_color="gray",
+            hover_color="#555555",
+            width=120
+        )
+        self.btn_refresh.pack(side="left")
+
+        # --- 2. Label de Contagem/Status ---
+        self.label_count = ctk.CTkLabel(self, text="Os resultados aparecerão aqui...", font=("Roboto", 14))
+        self.label_count.grid(row=1, column=0, pady=(5, 5), sticky="ew")
+
+        # --- 3. Tabela de Resultados (Container) ---
         self.container = ctk.CTkFrame(self, fg_color="transparent")
-        self.container.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.container.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
         self.container.grid_columnconfigure(0, weight=1)
         self.container.grid_rowconfigure(0, weight=1)
 
+        # Configuração do Estilo da Treeview (Mantendo seu estilo original)
         style = ttk.Style()
         style.theme_use("default")
         
@@ -186,7 +219,7 @@ class ResultsTab(ctk.CTkFrame):
         style.map("Treeview.Heading",
                   background=[('active', '#343638')])
 
-        # ATUALIZADO: Colunas incluem 'programa'
+        # Definição das Colunas
         columns = ("title", "author", "sigla", "universidade", "programa")
         self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="browse")
 
@@ -202,12 +235,14 @@ class ResultsTab(ctk.CTkFrame):
         self.tree.column("universidade", width=200, anchor="w")
         self.tree.column("programa", width=200, anchor="w")
 
+        # Scrollbar
         self.scrollbar = ctk.CTkScrollbar(self.container, command=self.tree.yview)
         self.tree.configure(yscrollcommand=self.scrollbar.set)
 
         self.tree.grid(row=0, column=0, sticky="nsew")
         self.scrollbar.grid(row=0, column=1, sticky="ns")
 
+        # Bindings
         self.tree.bind("<Double-1>", self._on_double_click)
         self.tree.bind("<Button-3>", self._show_context_menu)
         self.tree.bind("<<TreeviewSelect>>", self._on_row_select)

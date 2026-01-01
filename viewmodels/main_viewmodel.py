@@ -410,3 +410,44 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
                 print(f"Erro detalhado: {e}") # Debug
         else:
             self._log("Erro: Conteúdo PPR não encontrado (execute o scrap primeiro).", "red")
+
+    def scrape_pending_pprs(self):
+        """Inicia o processo de raspagem de todas as PPRs pendentes em background."""
+        pending = self.db.get_pending_ppr_records()
+        
+        if not pending:
+            self._log("Todas as PPRs listadas já possuem HTML salvo.", "green")
+            return
+
+        self._log(f"Iniciando download em lote de {len(pending)} PPRs pendentes...", "yellow")
+        
+        # Inicia em thread separada para manter a UI responsiva
+        thread = threading.Thread(target=self._run_batch_ppr_scraping, args=(pending,))
+        thread.start()
+
+    def _run_batch_ppr_scraping(self, pending_list):
+        """Executa o download sequencial com logs de progresso."""
+        total = len(pending_list)
+        success_count = 0
+        
+        for index, (pid, url) in enumerate(pending_list):
+            try:
+                # Log de progresso
+                self._log(f"Baixando ({index + 1}/{total}): {url}", "yellow")
+                
+                html = self.scraper.fetch_html(url)
+                
+                if html:
+                    self.db.save_ppr_content(url, html)
+                    success_count += 1
+                
+                # Pequena pausa para evitar bloqueio por excesso de requisições (Crawling educado)
+                time.sleep(1.0)
+                
+            except Exception as e:
+                self._log(f"Falha ao baixar {url}: {e}", "red")
+
+        self._log(f"Lote concluído! {success_count}/{total} PPRs novas baixadas.", "green")
+        
+        # Opcional: Atualizar a lista de resultados se houver alguma indicação visual
+        self.view.after_thread_safe(lambda: self.view.results_tab.update_ui())

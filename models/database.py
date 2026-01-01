@@ -245,3 +245,19 @@ class DatabaseModel:
                 conn.commit()
         except sqlite3.Error as e:
             raise Exception(f"Erro ao atualizar dados da universidade: {e}")
+
+    def get_pending_ppr_records(self):
+        """Retorna pesquisas que possuem link PPR mas NÃO possuem HTML válido salvo na tabela ppr."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, ppr_link 
+                FROM pesquisas 
+                WHERE ppr_link IS NOT NULL 
+                  AND ppr_link != '' 
+                  AND id NOT IN (
+                      SELECT pesquisa_id FROM ppr 
+                      WHERE html_content IS NOT NULL AND html_content != ''
+                  )
+            """)
+            return cursor.fetchall()
