@@ -510,3 +510,56 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
     def toggle_source_manually(self, root_url, new_status):
         self.db.save_source_status(root_url, new_status)
         self._log(f"Fonte {root_url} alterada manualmente para {new_status}", "white")
+
+    def batch_extract_univ_data(self):
+        """
+        Dispara a extração de metadados (Sigla/Univ/Programa) para 
+        TODAS as PPRs que já têm HTML salvo no banco.
+        """
+        records = self.db.get_all_ppr_with_html()
+        
+        if not records:
+            self._log("Nenhum HTML de PPR encontrado no banco para processar.", "yellow")
+            return
+            
+        self._log(f"Iniciando extração de dados em lote para {len(records)} registros...", "yellow")
+        
+        # Executa em thread para não travar a interface
+        threading.Thread(target=self._run_batch_extraction, args=(records,)).start()
+
+    def _run_batch_extraction(self, records):
+        # Importação tardia para evitar ciclos, se necessário
+        from services.parser_factory import ParserFactory
+        factory = ParserFactory()
+        
+        count = 0
+        total = len(records)
+        
+        for index, (title, author, url, html) in enumerate(records):
+            try:
+                # 1. Identifica o parser correto para este HTML/URL
+                parser = factory.get_parser(url, html_content=html)
+                
+                # 2. Extrai os dados
+                data = parser.extract(html, url)
+                
+                sigla = data.get('sigla', '-')
+                univ = data.get('universidade', 'Não identificada')
+                programa = data.get('programa', 'Não identificado')
+                
+                # 3. Salva no banco
+                self.db.update_univ_data(title, author, sigla, univ, programa)
+                count += 1
+                
+                # Log de progresso a cada 5 itens para não poluir demais
+                if index % 5 == 0:
+                    self._log(f"Processando {index+1}/{total}: {sigla} - {programa[:20]}...", "white")
+                    
+            except Exception as e:
+                # Não interrompe o lote por erro em um item, apenas loga
+                print(f"Erro ao extrair {url}: {e}")
+
+        self._log(f"Processamento concluído! Dados atualizados em {count}/{total} pesquisas.", "green")
+        
+        # Atualiza a tabela na interface
+        self.initialize_data()

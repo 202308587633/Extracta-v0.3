@@ -144,25 +144,6 @@ class DatabaseModel:
                 } for r in cursor.fetchall()
             ]
 
-    def update_univ_data(self, title, author, sigla, nome, programa):
-        """Armazena a sigla, nome da universidade e programa extraídos."""
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    UPDATE pesquisas 
-                    SET univ_sigla = ?, univ_nome = ?, programa = ?
-                    WHERE title = ? AND author = ?
-                """, (sigla, nome, programa, title, author))
-                conn.commit()
-        except sqlite3.Error as e:
-            raise Exception(f"Erro ao atualizar dados da universidade: {e}")
-
-    def __init__(self, db_name="database.db"):
-        self.db_name = db_name
-        self._init_db()
-        self._check_and_migrate()
-
     def _init_db(self):
         with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
             conn.execute("PRAGMA journal_mode=WAL;")
@@ -294,3 +275,37 @@ class DatabaseModel:
                     conn.commit()
         except sqlite3.Error as e:
             raise Exception(f"Erro de Banco de Dados (PPR): {e}")
+        
+    def __init__(self, db_name="database.db"):
+        self.db_name = db_name
+        self._init_db()
+        self._check_and_migrate()
+
+    def get_all_ppr_with_html(self):
+        """
+        Retorna (title, author, url, html_content) de todas as pesquisas 
+        que possuem o HTML da PPR salvo.
+        """
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.title, p.author, r.url, r.html_content 
+                FROM ppr r
+                JOIN pesquisas p ON r.pesquisa_id = p.id
+                WHERE r.html_content IS NOT NULL AND r.html_content != ''
+            """)
+            return cursor.fetchall()
+    
+    def update_univ_data(self, title, author, sigla, nome, programa):
+        """Armazena a sigla, nome da universidade e programa extraídos."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE pesquisas 
+                    SET univ_sigla = ?, univ_nome = ?, programa = ?
+                    WHERE title = ? AND author = ?
+                """, (sigla, nome, programa, title, author))
+                conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro ao atualizar dados da universidade: {e}")
