@@ -115,6 +115,7 @@ class ParserFactory:
             '.ufu.br': UfuParser,
             '.upf.br': UpfParser,
             '.ucb.br': UcbParser,
+            'hdl.handle.net/10183': UfrgsParser, # Código Handle da UFRGS
             '.ufrgs.br': UfrgsParser,
             '.ufjf.br': UfjfParser,
             '.ufpb.br': UfpbParser,
@@ -158,28 +159,20 @@ class ParserFactory:
 
     def get_parser(self, url, html_content=None):
         """
-        Seleciona o parser adequado. 
-        ORDEM ATUALIZADA:
-        1. Mapeamento explícito de Domínio/Handle (Prioridade Máxima).
-        2. Lógica específica para repositórios compartilhados (ex: Cruzeiro do Sul).
-        3. Detecção baseada no conteúdo HTML (VuFind, DSpace Genérico).
+        Seleciona o parser adequado.
+        1. Mapeamento por Domínio/Handle (URL).
+        2. Mapeamento por Meta Tags no HTML (NOVO - Identifica instituição pelo Handle interno).
+        3. Detecção Genérica (HTML).
         """
-        if not url: 
-            return self._default
-        
-        url_lower = url.lower()
-        
-        # --- 1. PRIORIDADE MÁXIMA: Mapeamento por Domínio/Handle ---
-        # Se o domínio já é conhecido (ex: .ucs.br, .usp.br), usa o parser especializado imediatamente.
-        # Isso evita que o parser genérico do DSpace "roube" a vez de um parser específico 
-        # que herda dele.
-        for domain, parser_cls in self._map.items():
-            if domain in url_lower:
-                return parser_cls()
+        # --- 1. Mapeamento por URL (Se fornecida) ---
+        if url:
+            url_lower = url.lower()
+            for domain, parser_cls in self._map.items():
+                if domain in url_lower:
+                    return parser_cls()
 
-        # --- 2. Lógica para Repositórios Compartilhados Específicos ---
-        # Casos onde o domínio é o mesmo, mas o conteúdo define a instituição (ex: Cruzeiro do Sul)
-        if "repositorio.cruzeirodosul.edu.br" in url_lower and html_content:
+        # --- Lógica de Repositórios Compartilhados (Cruzeiro do Sul etc) ---
+        if url and "repositorio.cruzeirodosul.edu.br" in url.lower() and html_content:
             html_upper = html_content.upper()
             if "UNIPÊ" in html_upper or "JOÃO PESSOA" in html_upper:
                 from parsers.unipe_parser import UNIPEParser
@@ -188,35 +181,45 @@ class ParserFactory:
                 from parsers.udf_parser import UDFParser
                 return UDFParser()
 
-        # --- 3. Detecção Genérica baseada em HTML (Fallback) ---
-        # Se não achou pelo domínio, tenta adivinhar o sistema pelo HTML
+        # --- 2. e 3. Análise do Conteúdo HTML ---
         if html_content:
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(html_content, 'html.parser')
             html_lower = html_content.lower()
+
+            # [NOVO] Verifica Meta Tag DC.identifier (Handle/DOI) no HTML
+            # Isso permite identificar a universidade mesmo sem a URL original
+            dc_id = soup.find('meta', attrs={'name': 'DC.identifier'})
+            if dc_id and dc_id.get('content'):
+                content_lower = dc_id['content'].lower()
+                for domain, parser_cls in self._map.items():
+                    if domain in content_lower:
+                        return parser_cls()
             
-            # Detecção de Buscador (VuFind/BDTD)
-            if "vufind" in html_lower or "bdtd.ibict.br" in url_lower:
+            # [NOVO] Fallback: Procura assinaturas visuais no HTML (ex: logos, links internos)
+            # Útil para casos como Lume UFRGS que tem links absolutos no corpo
+            if "lume.ufrgs.br" in html_lower or "logo_ufrgs.png" in html_lower:
+                return UfrgsParser()
+
+            # --- Detecção Genérica de Sistema (Se não identificou a instituição) ---
+            
+            # Buscadores
+            if "vufind" in html_lower or (url and "bdtd.ibict.br" in url.lower()):
                 from parsers.bdtd_parser import BDTDParser
                 return BDTDParser()
 
-            # Detecção Inteligente DSpace (Angular vs JSPUI)
-            
-            # Angular (DSpace 7+) - Procura por tags específicas do framework
+            # DSpace Angular (7+)
             if soup.find('ds-app') or soup.find('ds-root'):
                 from parsers.dspace_angular import DSpaceAngularParser
                 return DSpaceAngularParser()
 
-            # JSPUI/XMLUI (DSpace Antigo) - Procura por IDs clássicos
-            if soup.find('div', id='ds-main') or soup.find('div', id='aspect_artifactbrowser_ItemViewer_div_item-view'):
+            # DSpace JSPUI (Antigo - Caso da UFRGS)
+            if (soup.find('div', id='ds-main') or 
+                soup.find('div', id='aspect_artifactbrowser_ItemViewer_div_item-view') or
+                soup.find('meta', attrs={'content': 'DSpace 5.8'}) or # Detecta pelo Generator
+                len(soup.find_all('meta', attrs={'name': lambda x: x and x.startswith('DC.')})) > 3):
+                
                 from parsers.dspace_jspui import DSpaceJSPUIParser
                 return DSpaceJSPUIParser()
 
-            # Fallback Dublin Core (Geralmente indica JSPUI se houver muitas tags DC)
-            dc_tags = soup.find_all('meta', attrs={'name': lambda x: x and x.startswith('DC.')})
-            if len(dc_tags) > 3:
-                from parsers.dspace_jspui import DSpaceJSPUIParser
-                return DSpaceJSPUIParser()
-        
-        # Se nada funcionou, retorna o parser genérico básico
         return self._default
