@@ -14,20 +14,6 @@ class DatabaseModel:
                 """, (res[0], url, html_content))
                 conn.commit()
 
-    def save_log(self, message):
-        """Persiste mensagens de log no banco."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO logs (message) VALUES (?)", (message,))
-            conn.commit()
-
-    def get_plb_list(self):
-        """Recupera a lista de PLBs."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, url, created_at FROM plb ORDER BY created_at DESC")
-            return cursor.fetchall()
-
     def get_extracted_html(self, title, author):
         """Recupera o HTML da PPB via relação com pesquisas."""
         with sqlite3.connect(self.db_name) as conn:
@@ -57,15 +43,6 @@ class DatabaseModel:
                     VALUES (?, ?, ?, ?)
                 """, (item.get('title'), item.get('author'), item.get('ppb_link'), item.get('ppr_link')))
             conn.commit()
-
-    def save_plb(self, url, html_content):
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("INSERT INTO plb (url, html_content) VALUES (?, ?)", (url, html_content))
-                conn.commit()
-        except sqlite3.Error as e:
-            raise Exception(f"Erro de Banco de Dados (PLB): {e}")
 
     def get_plb_content(self, plb_id):
         try:
@@ -113,51 +90,28 @@ class DatabaseModel:
         except sqlite3.Error as e:
             raise Exception(f"Erro na consulta SQL (PPR Full): {e}")
 
-    def _check_and_migrate(self):
-        """Verifica se a coluna 'programa' existe e a cria se necessário."""
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(pesquisas)")
-                columns = [info[1] for info in cursor.fetchall()]
-                
-                if 'programa' not in columns:
-                    cursor.execute("ALTER TABLE pesquisas ADD COLUMN programa TEXT")
-                    conn.commit()
-        except sqlite3.Error as e:
-            print(f"Erro na migração do banco: {e}")
-
-    def get_all_pesquisas(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            # Adicionado campo 'programa' na query
-            cursor.execute("SELECT title, author, ppb_link, ppr_link, univ_sigla, univ_nome, programa FROM pesquisas ORDER BY extracted_at DESC")
-            return [
-                {
-                    'title': r[0], 
-                    'author': r[1], 
-                    'ppb_link': r[2], 
-                    'ppr_link': r[3],
-                    'univ_sigla': r[4],
-                    'univ_nome': r[5],
-                    'programa': r[6]
-                } for r in cursor.fetchall()
-            ]
+    def __init__(self, db_name="database.db"):
+        self.db_name = db_name
+        self._init_db()
+        self._check_and_migrate()
 
     def _init_db(self):
         with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
             conn.execute("PRAGMA journal_mode=WAL;")
             cursor = conn.cursor()
             
-            # ... (Tabelas existentes: plb, pesquisas, ppb, logs, ppr) ...
+            # Atualizamos a criação da tabela para incluir as novas colunas
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS plb (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     url TEXT NOT NULL,
                     html_content TEXT,
+                    search_term TEXT,
+                    search_year TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            # ... (Demais tabelas: pesquisas, ppb, logs, ppr, sources mantidas iguais) ...
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pesquisas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -198,53 +152,111 @@ class DatabaseModel:
                     FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
                 )
             """)
-
-            # --- NOVA TABELA: SOURCES (Fontes/Raízes) ---
-            # status: 1 = Ativo (Sucesso/Marcado), 0 = Inativo (Falha/Desmarcado)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sources (
                     root_url TEXT PRIMARY KEY,
                     status INTEGER DEFAULT 1
                 )
             """)
-            
             conn.commit()
             self._check_and_migrate()
 
-    def save_source_status(self, root_url, status):
-        """Salva ou atualiza o status de uma raiz (True=1, False=0)."""
-        val = 1 if status else 0
+    def _check_and_migrate(self):
+        """Verifica se as tabelas precisam de colunas novas (Migração)."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            
+            # Verifica colunas da tabela PLB
+            cursor.execute("PRAGMA table_info(plb)")
+            columns = [info[1] for info in cursor.fetchall()]
+            
+            if 'search_term' not in columns:
+                cursor.execute("ALTER TABLE plb ADD COLUMN search_term TEXT")
+            if 'search_year' not in columns:
+                cursor.execute("ALTER TABLE plb ADD COLUMN search_year TEXT")
+            
+            conn.commit()
+
+    def save_plb(self, url, html_content, term=None, year=None):
+        """Salva a página de lista (PLB) com termo e ano."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO plb (url, html_content, search_term, search_year) 
+                    VALUES (?, ?, ?, ?)
+                """, (url, html_content, term, year))
+                conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro ao salvar PLB: {e}")
+
+    def get_plb_list(self):
+        """Retorna lista de PLBs incluindo termo e ano."""
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO sources (root_url, status) 
-                VALUES (?, ?)
-                ON CONFLICT(root_url) DO UPDATE SET status = excluded.status
-            """, (root_url, val))
+                SELECT id, url, created_at, search_term, search_year 
+                FROM plb 
+                ORDER BY created_at DESC
+            """)
+            return cursor.fetchall()
+
+    def get_plb_by_id(self, plb_id):
+        """Retorna detalhes de uma PLB específica."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, url, html_content, search_term, search_year 
+                FROM plb WHERE id = ?
+            """, (plb_id,))
+            return cursor.fetchone()
+
+    def save_log(self, message):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO logs (message) VALUES (?)", (message,))
             conn.commit()
 
-    def get_all_sources(self):
-        """Retorna um dicionário {root_url: bool} com todas as fontes salvas."""
+    def save_ppb_content(self, url, html_content):
+        # Lógica de vínculo com pesquisa baseada na URL
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                # Tenta achar a pesquisa pelo link PPB
+                cursor.execute("SELECT id FROM pesquisas WHERE ppb_link = ?", (url,))
+                res = cursor.fetchone()
+                
+                if res:
+                    pesquisa_id = res[0]
+                    cursor.execute("""
+                        INSERT INTO ppb (pesquisa_id, url, html_content)
+                        VALUES (?, ?, ?)
+                    """, (pesquisa_id, url, html_content))
+                    conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro de Banco de Dados (PPB): {e}")
+
+    def save_ppr_content(self, url, html_content):
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM pesquisas WHERE ppr_link = ?", (url,))
+                res = cursor.fetchone()
+                if res:
+                    cursor.execute("""
+                        INSERT INTO ppr (pesquisa_id, url, html_content)
+                        VALUES (?, ?, ?)
+                    """, (res[0], url, html_content))
+                    conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro de Banco de Dados (PPR): {e}")
+
+    def get_all_pesquisas(self):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT root_url, status FROM sources")
-            # Retorna True se 1, False se 0
-            return {row[0]: bool(row[1]) for row in cursor.fetchall()}
-            
-    def get_source_status(self, root_url):
-        """
-        Verifica o status de uma raiz específica.
-        Retorna:
-            True: Se existe e está marcado (1) OU se não existe (assume novo como permitido).
-            False: Se existe e está desmarcado (0).
-        """
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT status FROM sources WHERE root_url = ?", (root_url,))
-            res = cursor.fetchone()
-            if res:
-                return bool(res[0])
-            return True # Padrão para novas fontes é "tentar baixar"
+            cursor.execute("SELECT * FROM pesquisas ORDER BY extracted_at DESC")
+            cols = [description[0] for description in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
     def get_pending_ppr_records(self):
         with sqlite3.connect(self.db_name) as conn:
@@ -261,31 +273,32 @@ class DatabaseModel:
             """)
             return cursor.fetchall()
 
-    def save_ppr_content(self, url, html_content):
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id FROM pesquisas WHERE ppr_link = ?", (url,))
-                res = cursor.fetchone()
-                if res:
-                    cursor.execute("""
-                        INSERT INTO ppr (pesquisa_id, url, html_content)
-                        VALUES (?, ?, ?)
-                    """, (res[0], url, html_content))
-                    conn.commit()
-        except sqlite3.Error as e:
-            raise Exception(f"Erro de Banco de Dados (PPR): {e}")
-        
-    def __init__(self, db_name="database.db"):
-        self.db_name = db_name
-        self._init_db()
-        self._check_and_migrate()
+    def save_source_status(self, root_url, status):
+        val = 1 if status else 0
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO sources (root_url, status) 
+                VALUES (?, ?)
+                ON CONFLICT(root_url) DO UPDATE SET status = excluded.status
+            """, (root_url, val))
+            conn.commit()
+
+    def get_all_sources(self):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT root_url, status FROM sources")
+            return {row[0]: bool(row[1]) for row in cursor.fetchall()}
+            
+    def get_source_status(self, root_url):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT status FROM sources WHERE root_url = ?", (root_url,))
+            res = cursor.fetchone()
+            if res: return bool(res[0])
+            return True
 
     def get_all_ppr_with_html(self):
-        """
-        Retorna (title, author, url, html_content) de todas as pesquisas 
-        que possuem o HTML da PPR salvo.
-        """
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("""
@@ -295,9 +308,8 @@ class DatabaseModel:
                 WHERE r.html_content IS NOT NULL AND r.html_content != ''
             """)
             return cursor.fetchall()
-    
+            
     def update_univ_data(self, title, author, sigla, nome, programa):
-        """Armazena a sigla, nome da universidade e programa extraídos."""
         try:
             with sqlite3.connect(self.db_name) as conn:
                 cursor = conn.cursor()
@@ -309,3 +321,12 @@ class DatabaseModel:
                 conn.commit()
         except sqlite3.Error as e:
             raise Exception(f"Erro ao atualizar dados da universidade: {e}")
+
+    def delete_plb(self, plb_id):
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM plb WHERE id = ?", (plb_id,))
+                conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro ao excluir histórico: {e}")

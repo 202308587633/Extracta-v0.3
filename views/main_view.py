@@ -127,8 +127,6 @@ class MainView(ctk.CTk):
         self.after(100, lambda: self.set_tab_state("Conteúdo PPB", "disabled"))
         self.after(100, lambda: self.set_tab_state("Conteúdo PPR", "disabled"))
 
-    # --- Métodos Utilitários e Callbacks ---
-
     def get_url_input(self):
         return self.home_tab.get_url()
 
@@ -178,3 +176,9 @@ class MainView(ctk.CTk):
             self.tabview.set("Conteúdo PPB") 
         except ValueError:
             pass
+        
+    def get_current_selection(self):
+        """Recupera termo e ano da aba Home."""
+        if hasattr(self, 'home_tab'):
+            return self.home_tab.get_search_details()
+        return None, None

@@ -8,7 +8,7 @@ import config
 import os
 import tempfile
 import webbrowser
-from urllib.parse import urlparse 
+from urllib.parse import urlparse, parse_qs, unquote
 
 class MainViewModel: # Certifique-se de que o nome da classe está correto
     def scrape_specific_search_url(self, url):
@@ -54,12 +54,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         _, html = self.db.get_plb_content(history_id) 
         
         self.view.after_thread_safe(lambda: self.view.history_tab.display_content(html))    
-
-    def load_history_list(self):
-        """Carrega da tabela 'plb' e atualiza a lista diretamente na aba"""
-        items = self.db.get_plb_list() 
-        # Acesso direto ao método update_list da history_tab
-        self.view.after_thread_safe(lambda: self.view.history_tab.update_list(items))
 
     def extract_data_command(self):
         """Extrai dados tratando possíveis falhas no banco ou no parser"""
@@ -145,26 +139,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         # Recupera o HTML da tabela ppr
         html = self.db.get_ppr_html(title, author)
         self._open_html_string_in_browser(html)
-
-    def check_pagination_and_scrape(self):
-        """Detecta e inicia a raspagem de páginas subsequentes."""
-        if not self.current_history_id: return
-        try:
-            # CORREÇÃO: Removida a linha duplicada de re.findall
-            original_url, html = self.db.get_plb_content(self.current_history_id)
-            if not html: return
-            
-            page_numbers = re.findall(r'[?&](?:amp;)?page=(\d+)', html)
-            if not page_numbers:
-                self._log("Nenhuma paginação numérica encontrada.", "yellow")
-                return
-            max_page = max(map(int, page_numbers))
-            if max_page <= 1: return
-            self._log(f"Paginação detectada ({max_page} páginas).", "green")
-            thread = threading.Thread(target=self._run_pagination_task, args=(original_url, max_page))
-            thread.start()
-        except Exception as e:
-            self._log(f"Erro na paginação: {e}", "red")
 
     def handle_result_selection(self, title, author):
         """Atualiza o estado das abas e injeta o conteúdo conforme a seleção na tabela."""
@@ -463,34 +437,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except:
             pass
         self.view.update_status(message, color)
-
-    def load_history_list(self):
-        items = self.db.get_plb_list() 
-        self.view.after_thread_safe(lambda: self.view.history_tab.update_list(items))
-    
-    def start_scraping_command(self):
-        url = self.view.get_url_input()
-        if not url: return
-        self.view.toggle_button(False)
-        thread = threading.Thread(target=self._run_task, args=(url,))
-        thread.start()
-
-    def _run_task(self, url):
-        try:
-            html = self.scraper.fetch_html(url)
-            self.db.save_plb(url, html)
-            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
-            self.view.after_thread_safe(self.load_history_list)
-            
-            # Atualiza fonte com sucesso
-            self._update_source_ui_and_db(url, True)
-            self._log("PLB capturada e salva com sucesso.", "green")
-        except Exception as e:
-            # Atualiza fonte com falha
-            self._update_source_ui_and_db(url, False)
-            self._log(str(e), "red")
-        finally:
-            self.view.toggle_button(True)
     
     def _run_specific_scraping_task(self, url, doc_type='buscador'):
         try:
@@ -563,3 +509,130 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         
         # Atualiza a tabela na interface
         self.initialize_data()
+
+    def load_history_list(self):
+        """
+        Carrega o histórico e prepara os dados estruturados para a Tabela (Treeview).
+        Prioriza 'search_term' e 'search_year' do banco. Se não existirem, faz parse da URL.
+        """
+        # O método get_plb_list agora deve retornar: (id, url, created_at, search_term, search_year)
+        raw_items = self.db.get_plb_list() 
+        structured_items = []
+
+        for item in raw_items:
+            # Desempacotamento seguro (garanta que o DatabaseModel retornará 5 itens)
+            # Se o banco antigo retornar só 3, isso daria erro, mas assumimos que o banco foi migrado.
+            try:
+                item_id = item[0]
+                url = item[1]
+                created_at = item[2]
+                db_term = item[3] if len(item) > 3 else None
+                db_year = item[4] if len(item) > 4 else None
+            except IndexError:
+                # Fallback para caso o DB não tenha retornado as colunas novas ainda
+                item_id, url, created_at = item[0], item[1], item[2]
+                db_term, db_year = None, None
+
+            # Lógica Híbrida: Banco > URL
+            if db_term and db_year:
+                termo = db_term
+                ano = db_year
+                # A página geralmente não é salva como metadado fixo, extraímos da URL
+                try:
+                    parsed = urlparse(url)
+                    pagina = parse_qs(parsed.query).get('page', ['1'])[0]
+                except:
+                    pagina = '1'
+            else:
+                # Fallback: Extrair tudo da URL (para registros antigos)
+                try:
+                    parsed = urlparse(url)
+                    params = parse_qs(parsed.query)
+                    
+                    termo_raw = params.get('lookfor0[]', params.get('lookfor', ['-']))[0]
+                    termo = unquote(termo_raw).replace('"', '')
+                    
+                    ano = params.get('publishDatefrom', ['-'])[0]
+                    pagina = params.get('page', ['1'])[0]
+                except Exception:
+                    termo = "URL Personalizada"
+                    ano = "-"
+                    pagina = "1"
+
+            # Formata a data
+            data_fmt = created_at
+            
+            # Adiciona à lista estruturada para a View
+            structured_items.append((item_id, termo, ano, pagina, data_fmt, url))
+
+        # Envia para a View
+        self.view.after_thread_safe(lambda: self.view.history_tab.update_table(structured_items))
+
+    def start_scraping_command(self):
+        url = self.view.get_url_input()
+        if not url: return
+        
+        # NOVO: Obtém o termo e ano selecionados na interface
+        # (O método get_current_selection deve ter sido criado na MainView)
+        term, year = None, None
+        if hasattr(self.view, 'get_current_selection'):
+            term, year = self.view.get_current_selection()
+        
+        self.view.toggle_button(False)
+        
+        # Passa term e year para a thread
+        thread = threading.Thread(target=self._run_task, args=(url, term, year))
+        thread.start()
+
+    def _run_task(self, url, term=None, year=None):
+        try:
+            html = self.scraper.fetch_html(url)
+            
+            # NOVO: Passa term e year para o método save_plb
+            # (Certifique-se que db.save_plb aceita esses argumentos)
+            self.db.save_plb(url, html, term, year)
+            
+            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
+            self.view.after_thread_safe(self.load_history_list)
+            
+            self._update_source_ui_and_db(url, True)
+            self._log("PLB capturada e salva com sucesso.", "green")
+        except Exception as e:
+            self._update_source_ui_and_db(url, False)
+            self._log(str(e), "red")
+        finally:
+            self.view.toggle_button(True)
+
+    def check_pagination_and_scrape(self, history_id):
+        try:
+            # Recupera registro original para manter consistência do Termo/Ano
+            # get_plb_by_id deve retornar (id, url, html, term, year)
+            record = self.db.get_plb_by_id(history_id)
+            if not record: return
+            
+            current_url = record[1]
+            # Índices baseados na query SELECT do database.py
+            current_term = record[3] if len(record) > 3 else None
+            current_year = record[4] if len(record) > 4 else None
+            
+            # Calcula próxima página
+            parsed = urlparse(current_url)
+            params = parse_qs(parsed.query)
+            current_page = int(params.get('page', ['1'])[0])
+            next_page = current_page + 1
+            params['page'] = [str(next_page)]
+            
+            from urllib.parse import urlencode, urlunparse
+            new_query = urlencode(params, doseq=True)
+            next_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+            
+            self._log(f"Buscando página {next_page}...", "yellow")
+            
+            self.view.toggle_button(False)
+            
+            # NOVO: Inicia thread repassando o termo e ano originais
+            thread = threading.Thread(target=self._run_task, args=(next_url, current_term, current_year))
+            thread.start()
+            
+        except Exception as e:
+            self._log(f"Erro ao calcular paginação: {e}", "red")
