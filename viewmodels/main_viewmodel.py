@@ -8,7 +8,9 @@ import config
 import os
 import tempfile
 import webbrowser
-from urllib.parse import urlparse, parse_qs, unquote
+from urllib.parse import urlparse, parse_qs, unquote, urlencode, urlunparse
+from bs4 import BeautifulSoup
+import math
 
 class MainViewModel: # Certifique-se de que o nome da classe está correto
     def scrape_specific_search_url(self, url):
@@ -22,31 +24,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
         thread.start()
 
-    def _run_pagination_task(self, base_url, max_page):
-        """Executa o DeepScrap de PLBs: percorre e salva todas as páginas de listagem na tabela 'plb'"""
-        try:
-            self._log(f"Iniciando DeepScrap de PLBs: total de {max_page} páginas.", "yellow")
-            separator = "&" if "?" in base_url else "?"
-            
-            for i in range(2, max_page + 1):
-                if "page=" in base_url:
-                    current_url = re.sub(r'page=\d+', f'page={i}', base_url)
-                else:
-                    current_url = f"{base_url}{separator}page={i}"
-                
-                self._log(f"Atividade: Capturando PLB {i} de {max_page}...", "yellow")
-                
-                html = self.scraper.fetch_html(current_url)
-                # Atualizado para usar a nova tabela 'plb'
-                self.db.save_plb(current_url, html)
-                
-                time.sleep(1.5)
-                
-            self._log(f"Sucesso: DeepScrap concluído. {max_page} PLBs armazenadas.", "green")
-            self.view.after_thread_safe(self.load_history_list)
-        except Exception as e:
-            self._log(f"Erro Crítico no DeepScrap de PLBs: {e}", "red")
-
     def load_history_details(self, history_id):
         """Busca conteúdo da tabela 'plb' e exibe na interface."""
         self.current_history_id = history_id
@@ -54,44 +31,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         _, html = self.db.get_plb_content(history_id) 
         
         self.view.after_thread_safe(lambda: self.view.history_tab.display_content(html))    
-
-    def extract_data_command(self):
-        """Extrai dados tratando possíveis falhas no banco ou no parser"""
-        if not self.current_history_id: 
-            self._log("Selecione uma PLB no histórico primeiro.", "yellow")
-            return
-        try:
-            url, html = self.db.get_plb_content(self.current_history_id)
-            if not html: 
-                raise Exception("Aviso: Conteúdo da PLB está vazio ou indisponível.")
-
-            self._log(f"Minerando dados em: {url}", "yellow")
-            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
-            
-            if data:
-                self.db.save_pesquisas(data) 
-                self._log(f"Sucesso: {len(data)} pesquisas salvas.", "green")
-                
-                all_results = self.db.get_all_pesquisas()
-                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(all_results))
-                self.view.switch_to_results_tab()
-            else:
-                self._log("Nenhum dado científico encontrado.", "red")
-        except Exception as e:
-            self._log(str(e), "red")
-
-    def open_plb_in_browser(self):
-        """Abre a PLB (Página de Listagem) no navegador."""
-        if not self.current_history_id:
-            self._log("Selecione um item do histórico primeiro.", "yellow")
-            return
-        _, html = self.db.get_plb_content(self.current_history_id)
-        self._open_html_string_in_browser(html)
-
-    def open_ppb_browser_from_db(self, title, author):
-        """Abre a PPB (Página de Pesquisa) no navegador."""
-        html = self.db.get_extracted_html(title, author)
-        self._open_html_string_in_browser(html)
 
     def on_tab_changed(self):
         """Atualiza o conteúdo baseado no nome exato da aba selecionada"""
@@ -154,18 +93,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         
         # Força a atualização imediata caso o usuário já esteja na aba
         self.on_tab_changed()
-
-    def delete_history_item(self):
-        """Remove um item do histórico e limpa a visualização."""
-        if not self.current_history_id: return
-        try:
-            self.db.delete_history(self.current_history_id)
-            self._log(f"Atividade: Item {self.current_history_id} excluído.", "green")
-            self.current_history_id = None
-            self.view.after_thread_safe(lambda: self.view.history_tab.display_content(""))
-            self.load_history_list()
-        except Exception as e:
-            self._log(f"Erro Crítico: {e}", "red")
 
     def _extract_meta_content(self, soup, meta_names):
         """Busca conteúdo em tags <meta name='...'>"""
@@ -322,12 +249,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         """Atualiza a aba de Fontes na interface"""
         root = self._extract_root_url(url)
         self.view.update_source_status(root, success)
-
-    def __init__(self, view):
-        self.view = view
-        self.db = DatabaseModel(db_name=config.DB_NAME)
-        self.scraper = ScraperModel()
-        self.current_history_id = None
 
     def initialize_data(self):
         """Carrega dados iniciais: PLBs, Pesquisas e agora as FONTES salvas."""
@@ -603,36 +524,242 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         finally:
             self.view.toggle_button(True)
 
-    def check_pagination_and_scrape(self, history_id):
+    def __init__(self, view):
+        self.view = view
+        self.db = DatabaseModel(db_name=config.DB_NAME)
+        self.scraper = ScraperModel()
+        self.current_history_id = None
+
+    def delete_history_item(self, history_id):
+        """Remove um item do histórico pelo ID."""
         try:
-            # Recupera registro original para manter consistência do Termo/Ano
-            # get_plb_by_id deve retornar (id, url, html, term, year)
+            if hasattr(self.db, 'delete_plb'):
+                self.db.delete_plb(history_id)
+            else:
+                self.db.delete_history(history_id)
+            
+            self.load_history_list()
+            self._log(f"Registro {history_id} excluído.", "white")
+        except Exception as e:
+            self._log(f"Erro ao excluir: {e}", "red")
+
+    def open_plb_in_browser(self, history_id):
+        """Abre o HTML salvo no navegador."""
+        try:
+            record = self.db.get_plb_by_id(history_id)
+            # record = (id, url, html, term, year) -> HTML é índice 2
+            if record and len(record) > 2 and record[2]:
+                self.view.open_html_from_db_in_browser(record[2])
+            else:
+                self._log("HTML não encontrado para este registro.", "yellow")
+        except Exception as e:
+            self._log(f"Erro ao abrir HTML: {e}", "red")
+
+    def extract_data_command(self, history_id):
+        """Extrai dados da PLB selecionada."""
+        try:
+            record = self.db.get_plb_by_id(history_id)
+            if not record: return
+
+            url = record[1]
+            html = record[2]
+            
+            if not html:
+                self._log("Aviso: Conteúdo HTML vazio.", "yellow")
+                return
+
+            self._log(f"Minerando dados em: {url}", "yellow")
+            
+            from models.parsers.vufind_parser import VufindParser
+
+            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
+            
+            if data:
+                self.db.save_pesquisas(data) 
+                self._log(f"Sucesso: {len(data)} pesquisas salvas.", "green")
+                
+                all_results = self.db.get_all_pesquisas()
+                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(all_results))
+                self.view.switch_to_results_tab()
+            else:
+                self._log("Nenhum dado encontrado.", "red")
+        except Exception as e:
+            self._log(f"Erro na extração: {e}", "red")
+
+    def check_pagination_and_scrape(self, history_id):
+        """Menu de contexto individual: Busca TODAS as páginas seguintes deste item."""
+        try:
             record = self.db.get_plb_by_id(history_id)
             if not record: return
             
-            current_url = record[1]
-            # Índices baseados na query SELECT do database.py
-            current_term = record[3] if len(record) > 3 else None
-            current_year = record[4] if len(record) > 4 else None
+            url = record[1]
+            html = record[2]
+            # Tenta recuperar termo e ano para manter consistência
+            term = record[3] if len(record) > 3 else None
+            year = record[4] if len(record) > 4 else None
             
-            # Calcula próxima página
-            parsed = urlparse(current_url)
-            params = parse_qs(parsed.query)
-            current_page = int(params.get('page', ['1'])[0])
-            next_page = current_page + 1
-            params['page'] = [str(next_page)]
+            # Descobre total de páginas analisando o HTML
+            max_page = self._extract_max_page(html)
             
-            from urllib.parse import urlencode, urlunparse
-            new_query = urlencode(params, doseq=True)
-            next_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
-            
-            self._log(f"Buscando página {next_page}...", "yellow")
-            
-            self.view.toggle_button(False)
-            
-            # NOVO: Inicia thread repassando o termo e ano originais
-            thread = threading.Thread(target=self._run_task, args=(next_url, current_term, current_year))
-            thread.start()
-            
+            if max_page > 1:
+                self._log(f"Iniciando DeepScrap individual (Total: {max_page} páginas)...", "yellow")
+                self.view.toggle_button(False)
+                # Inicia a thread que baixa da página 2 até max_page
+                threading.Thread(target=self._run_pagination_task, args=(url, max_page, term, year)).start()
+            else:
+                self._log("Esta pesquisa parece ter apenas 1 página.", "yellow")
+
         except Exception as e:
-            self._log(f"Erro ao calcular paginação: {e}", "red")
+            self._log(f"Erro ao iniciar paginação: {e}", "red")
+
+    def scrape_all_page1_pagination(self):
+        """Botão 'DeepScrap em Massa': Encontra todas as PLBs 'Página 1' e busca TODAS as páginas seguintes."""
+        raw_items = self.db.get_plb_list()
+        page1_ids = []
+
+        for item in raw_items:
+            try:
+                url = item[1]
+                parsed = urlparse(url)
+                params = parse_qs(parsed.query)
+                page = int(params.get('page', ['1'])[0])
+                if page == 1:
+                    page1_ids.append(item[0]) # Salva o ID
+            except:
+                continue
+
+        if not page1_ids:
+            self._log("Nenhuma 'Página 1' encontrada para processar.", "yellow")
+            return
+
+        self._log(f"Iniciando DeepScrap em massa para {len(page1_ids)} pesquisas...", "yellow")
+        self.view.toggle_button(False)
+        threading.Thread(target=self._run_batch_deep_scraping, args=(page1_ids,)).start()
+
+    def _run_batch_deep_scraping(self, history_ids):
+        """Processa a lista de IDs sequencialmente para o DeepScrap em Massa."""
+        for index, h_id in enumerate(history_ids):
+            try:
+                record = self.db.get_plb_by_id(h_id)
+                if not record: continue
+                
+                url = record[1]
+                html = record[2]
+                term = record[3] if len(record) > 3 else None
+                year = record[4] if len(record) > 4 else None
+                
+                max_page = self._extract_max_page(html)
+                
+                if max_page > 1:
+                    self._log(f"[{index+1}/{len(history_ids)}] Processando '{term}': Buscando até pág {max_page}...", "white")
+                    # Chama a rotina de paginação (síncrona aqui dentro da thread)
+                    self._run_pagination_task_sync(url, max_page, term, year)
+                else:
+                    self._log(f"[{index+1}/{len(history_ids)}] '{term}' só tem 1 página. Pulando.", "white")
+            except Exception as e:
+                self._log(f"Erro no item {index+1}: {e}", "red")
+        
+        self.view.toggle_button(True)
+        self._log("Processo em massa finalizado.", "green")
+
+    def _run_pagination_task(self, base_url, max_page, term=None, year=None):
+        """Wrapper para thread única (DeepScrap individual)."""
+        self._run_pagination_task_sync(base_url, max_page, term, year)
+        self.view.toggle_button(True)
+        self._log("DeepScrap individual concluído.", "green")
+
+    def _run_pagination_task_sync(self, base_url, max_page, term, year):
+        """Lógica real de download sequencial das páginas (da 2 até max_page)."""
+        separator = "&" if "?" in base_url else "?"
+        
+        for i in range(2, max_page + 1):
+            # Constrói a URL da página i
+            if "page=" in base_url:
+                current_url = re.sub(r'page=\d+', f'page={i}', base_url)
+            else:
+                current_url = f"{base_url}{separator}page={i}"
+            
+            self._log(f"  -> Baixando pág {i}/{max_page}...", "yellow")
+            
+            try:
+                html = self.scraper.fetch_html(current_url)
+                if html:
+                    self.db.save_plb(current_url, html, term, year)
+                    if hasattr(self, '_update_source_ui_and_db'):
+                        self._update_source_ui_and_db(current_url, True)
+                
+                # Pequena pausa para não bloquear
+                time.sleep(1.5)
+            except Exception as e:
+                self._log(f"Falha na pág {i}: {e}", "red")
+                if hasattr(self, '_update_source_ui_and_db'):
+                    self._update_source_ui_and_db(current_url, False)
+        
+        self.view.after_thread_safe(self.load_history_list)
+
+    def open_ppb_browser_from_db(self, title=None, author=None):
+        """
+        Abre a PPB (Página de Pesquisa) no navegador.
+        Se title/author não forem passados, usa a seleção atual (self.selected_research).
+        """
+        if not title or not author:
+            if hasattr(self, 'selected_research') and self.selected_research:
+                title = self.selected_research.get("title")
+                author = self.selected_research.get("author")
+            else:
+                self._log("Nenhuma pesquisa selecionada para visualizar.", "yellow")
+                return
+
+        html = self.db.get_extracted_html(title, author)
+        if html:
+            self._open_html_string_in_browser(html)
+        else:
+            self._log("HTML da PPB não encontrado no banco.", "red")
+
+    def _extract_max_page(self, html_content):
+        """
+        Lê o número total de páginas do HTML.
+        Estratégia 1: Procura texto 'Resultados de X'.
+        Estratégia 2: Varre a paginação em busca do maior número (lida com [24]).
+        """
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            
+            # --- ESTRATÉGIA 1: Cálculo baseado no total de resultados (Mais preciso) ---
+            # Busca strings como "Mostrando 1 - 20 resultados de 472"
+            # O BDTD usa 20 resultados por página.
+            stats_node = soup.find(string=re.compile(r"resultados de", re.IGNORECASE))
+            if stats_node:
+                # Pega o texto completo do pai para garantir contexto
+                full_text = stats_node.find_parent().get_text(strip=True)
+                # Extrai o número total (ex: 472)
+                match = re.search(r"resultados de\s*([\d\.]+)", full_text, re.IGNORECASE)
+                if match:
+                    total_str = match.group(1).replace('.', '')
+                    if total_str.isdigit():
+                        return math.ceil(int(total_str) / 20)
+
+            # --- ESTRATÉGIA 2: Links de Paginação (Fallback) ---
+            # Encontra todos os links dentro da lista de paginação
+            # O seletor .pagination a pega todos os links numéricos e o "Ir para a última página"
+            page_links = soup.select('.pagination a')
+            max_p = 1
+            
+            for link in page_links:
+                txt = link.get_text(strip=True)
+                
+                # Extrai apenas os dígitos do texto (remove colchetes [] e espaços)
+                # Ex: "[24]" -> "24", "10" -> "10"
+                numbers = re.findall(r'\d+', txt)
+                
+                if numbers:
+                    # Pega o último número encontrado no texto (caso haja mais de um, o que é raro aqui)
+                    val = int(numbers[-1])
+                    if val > max_p:
+                        max_p = val
+            
+            return max_p
+
+        except Exception as e:
+            self._log(f"Erro ao extrair paginação: {e}", "red")
+            return 1

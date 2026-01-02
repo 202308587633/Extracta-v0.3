@@ -60,7 +60,7 @@ class HomeTab(ctk.CTkFrame):
             width=100
         )
         self.cmb_year.pack(side="left")
-        self.cmb_year.set("2024")
+        self.cmb_year.set("2020")
 
         # --- URL e Botão ---
         self.label_info = ctk.CTkLabel(

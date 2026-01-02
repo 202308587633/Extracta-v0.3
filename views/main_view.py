@@ -50,83 +50,6 @@ class MainView(ctk.CTk):
         
         # Você pode adicionar botões de navegação lateral aqui futuramente se desejar
 
-    def _setup_tabs(self):
-        """Configura as abas e injeta as dependências do ViewModel"""
-        self.tabview = ctk.CTkTabview(self)
-        self.tabview.grid(row=0, column=1, padx=10, pady=(10, 0), sticky="nsew")
-        
-        # Vincula evento de troca de aba
-        self.tabview.configure(command=self.viewmodel.on_tab_changed)
-
-        # Adicionando as abas
-        self.tabview.add("Início")
-        self.tabview.add("Histórico")
-        self.tabview.add("Resultados")
-        self.tabview.add("Conteúdo PPB")
-        self.tabview.add("Conteúdo PPR")
-        self.tabview.add("Fontes")
-        self.tabview.add("Logs")
-
-        # --- 1. Aba Início ---
-        self.home_tab = HomeTab(
-            parent=self.tabview.tab("Início"), 
-            command_callback=self.viewmodel.start_scraping_command
-        )
-        self.home_tab.pack(fill="both", expand=True)
-
-        # --- 2. Aba Resultados ---
-        self.results_tab = ResultsTab(
-            parent=self.tabview.tab("Resultados"),
-            viewmodel=self.viewmodel,
-            on_scrape_callback=self.viewmodel.scrape_specific_search_url,
-            on_repo_scrape_callback=self.viewmodel.scrape_repository_url
-        )
-        self.results_tab.pack(fill="both", expand=True)
-
-        # --- 3. Aba Histórico ---
-        self.history_tab = HistoryTab(
-            parent=self.tabview.tab("Histórico"),
-            on_select_callback=self.viewmodel.load_history_details,
-            on_delete_callback=self.viewmodel.delete_history_item,
-            on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
-            on_extract_callback=self.viewmodel.extract_data_command,
-            on_browser_callback=self.viewmodel.open_plb_in_browser
-        )
-        self.history_tab.pack(fill="both", expand=True)
-
-        # --- 4. Aba Conteúdo PPB ---
-        self.content_tab = ContentTab(
-            parent=self.tabview.tab("Conteúdo PPB"),
-            on_browser_callback=self.viewmodel.open_ppb_browser_from_db
-        )
-        self.content_tab.pack(fill="both", expand=True)
-
-        # --- 5. Aba Conteúdo PPR ---
-        self.repo_tab = RepoTab(
-            parent=self.tabview.tab("Conteúdo PPR"),
-            on_browser_callback=self.viewmodel.open_ppr_in_browser
-        )
-        self.repo_tab.pack(fill="both", expand=True)
-        
-        # --- 6. Aba Fontes (Nova) ---
-        self.sources_tab = SourcesTab(self.tabview.tab("Fontes"))
-        self.sources_tab.pack(fill="both", expand=True)
-
-        # --- 7. Aba Logs ---
-        self.log_tab = LogTab(parent=self.tabview.tab("Logs"))
-        self.log_tab.pack(fill="both", expand=True)
-        
-        # --- Barra de Status (Rodapé) ---
-        self.status_container = ctk.CTkFrame(self, height=30, corner_radius=0)
-        self.status_container.grid(row=1, column=1, sticky="ew", padx=10, pady=10)
-        
-        self.label_status = ctk.CTkLabel(self.status_container, text="Pronto", font=("Roboto", 12))
-        self.label_status.pack(side="left", padx=10)
-
-        # Estado Inicial das abas de conteúdo
-        self.after(100, lambda: self.set_tab_state("Conteúdo PPB", "disabled"))
-        self.after(100, lambda: self.set_tab_state("Conteúdo PPR", "disabled"))
-
     def get_url_input(self):
         return self.home_tab.get_url()
 
@@ -182,3 +105,82 @@ class MainView(ctk.CTk):
         if hasattr(self, 'home_tab'):
             return self.home_tab.get_search_details()
         return None, None
+
+    def _setup_tabs(self):
+        self.tabview = ctk.CTkTabview(self)
+        self.tabview.grid(row=0, column=1, padx=10, pady=(10, 0), sticky="nsew")
+        
+        # Vincula evento de troca de aba
+        self.tabview.configure(command=self.viewmodel.on_tab_changed)
+
+        # Adicionando as abas
+        self.tabview.add("Início")
+        self.tabview.add("Histórico")
+        self.tabview.add("Resultados")
+        self.tabview.add("Conteúdo PPB")
+        self.tabview.add("Conteúdo PPR")
+        self.tabview.add("Fontes")
+        self.tabview.add("Logs")
+
+        # --- 1. Aba Início ---
+        self.home_tab = HomeTab(
+            parent=self.tabview.tab("Início"), 
+            command_callback=self.viewmodel.start_scraping_command
+        )
+        self.home_tab.pack(fill="both", expand=True)
+
+        # --- 2. Aba Resultados ---
+        self.results_tab = ResultsTab(
+            parent=self.tabview.tab("Resultados"),
+            viewmodel=self.viewmodel,
+            on_scrape_callback=self.viewmodel.scrape_specific_search_url,
+            on_repo_scrape_callback=self.viewmodel.scrape_repository_url
+        )
+        self.results_tab.pack(fill="both", expand=True)
+
+        # --- 3. Aba Histórico ---
+        self.history_tab = HistoryTab(
+            parent=self.tabview.tab("Histórico"),
+            on_select_callback=None,
+            on_delete_callback=self.viewmodel.delete_history_item,
+            on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
+            on_extract_callback=self.viewmodel.extract_data_command,
+            on_browser_callback=self.viewmodel.open_plb_in_browser,
+            on_deep_scrape_callback=self.viewmodel.scrape_all_page1_pagination
+        )
+        self.history_tab.pack(fill="both", expand=True)
+
+        # --- 4. Aba Conteúdo PPB ---
+        # CORREÇÃO: Passando o callback obrigatório
+        self.content_tab = ContentTab(
+            parent=self.tabview.tab("Conteúdo PPB"),
+            on_browser_callback=self.viewmodel.open_ppb_browser_from_db
+        )
+        self.content_tab.pack(fill="both", expand=True)
+
+        # --- 5. Aba Conteúdo PPR ---
+        # CORREÇÃO: Passando o callback obrigatório
+        self.repo_tab = RepoTab(
+            parent=self.tabview.tab("Conteúdo PPR"),
+            on_browser_callback=self.viewmodel.open_ppr_in_browser
+        )
+        self.repo_tab.pack(fill="both", expand=True)
+        
+        # --- 6. Aba Fontes ---
+        self.sources_tab = SourcesTab(self.tabview.tab("Fontes"))
+        self.sources_tab.pack(fill="both", expand=True)
+
+        # --- 7. Aba Logs ---
+        self.log_tab = LogTab(parent=self.tabview.tab("Logs"))
+        self.log_tab.pack(fill="both", expand=True)
+        
+        # --- Barra de Status ---
+        self.status_container = ctk.CTkFrame(self, height=30, corner_radius=0)
+        self.status_container.grid(row=1, column=1, sticky="ew", padx=10, pady=10)
+        
+        self.label_status = ctk.CTkLabel(self.status_container, text="Pronto", font=("Roboto", 12))
+        self.label_status.pack(side="left", padx=10)
+
+        # Estado Inicial das abas de conteúdo
+        self.after(100, lambda: self.set_tab_state("Conteúdo PPB", "disabled"))
+        self.after(100, lambda: self.set_tab_state("Conteúdo PPR", "disabled"))
