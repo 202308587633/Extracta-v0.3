@@ -36,33 +36,48 @@ class HistoryTab(ctk.CTkFrame):
         self.textbox_content.insert("0.0", html_content)
         self.textbox_content.configure(state="disabled")
 
-    def __init__(self, parent, on_select_callback, on_delete_callback, on_pagination_callback, on_extract_callback, on_browser_callback, on_deep_scrape_callback):
+    def __init__(self, parent, on_select_callback, on_delete_callback, on_pagination_callback, on_extract_callback, on_browser_callback, on_deep_scrape_callback, on_stop_callback):
         super().__init__(parent)
+        # Callbacks
         self.on_select_callback = on_select_callback
         self.on_delete_callback = on_delete_callback
         self.on_pagination_callback = on_pagination_callback
         self.on_extract_callback = on_extract_callback
         self.on_browser_callback = on_browser_callback
         self.on_deep_scrape_callback = on_deep_scrape_callback
-        
-        self.item_map = {} # Mapeia ID da Treeview -> ID do Banco
-        self.all_data = [] # Armazena todos os dados brutos para filtragem
+        self.on_stop_callback = on_stop_callback
+
+        # Armazenamento de dados para Filtros e Ordenação
+        self.item_map = {} 
+        self.all_data = [] # Lista completa: [(id, termo, ano, pagina, data, url), ...]
         
         self._setup_ui()
         self._setup_context_menu()
 
     def _setup_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(2, weight=1) # Tabela expande na linha 2
+        self.grid_rowconfigure(2, weight=1) # A tabela (linha 2) é que deve expandir
 
-        # --- 1. Cabeçalho Superior ---
+        # --- 1. Cabeçalho Superior (Botões de Ação Global) ---
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.header_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
         
         self.lbl_title = ctk.CTkLabel(self.header_frame, text="Histórico de Pesquisas (PLB)", font=("Roboto", 16, "bold"))
         self.lbl_title.pack(side="left")
 
-        # Botão DeepScrap
+        # Botão: Parar (Vermelho) - Inicia desabilitado
+        self.btn_stop = ctk.CTkButton(
+            self.header_frame,
+            text="⏹️ Parar",
+            command=self._on_stop_click,
+            fg_color="#c0392b",
+            hover_color="#e74c3c",
+            width=80,
+            state="disabled"
+        )
+        self.btn_stop.pack(side="right", padx=5)
+
+        # Botão: DeepScrap em Massa
         self.btn_deep_all = ctk.CTkButton(
             self.header_frame, 
             text="📚 DeepScrap (Todas as Páginas)", 
@@ -73,7 +88,7 @@ class HistoryTab(ctk.CTkFrame):
         )
         self.btn_deep_all.pack(side="right", padx=5)
 
-        # --- 2. Barra de Filtros (NOVO) ---
+        # --- 2. Barra de Filtros (NOVA FUNCIONALIDADE) ---
         self.filter_frame = ctk.CTkFrame(self)
         self.filter_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         
@@ -81,7 +96,6 @@ class HistoryTab(ctk.CTkFrame):
         ctk.CTkLabel(self.filter_frame, text="Filtrar Termo:", font=("Roboto", 12)).pack(side="left", padx=(10, 5))
         self.entry_filter_term = ctk.CTkEntry(self.filter_frame, width=200, placeholder_text="Digite para filtrar...")
         self.entry_filter_term.pack(side="left", padx=5)
-        # Vincula evento de digitação (KeyRelease)
         self.entry_filter_term.bind("<KeyRelease>", self._apply_filters)
 
         # Filtro: Ano
@@ -90,7 +104,7 @@ class HistoryTab(ctk.CTkFrame):
         self.entry_filter_year.pack(side="left", padx=5)
         self.entry_filter_year.bind("<KeyRelease>", self._apply_filters)
 
-        # Botão Limpar Filtros
+        # Botão Limpar
         self.btn_clear_filters = ctk.CTkButton(
             self.filter_frame, 
             text="❌ Limpar", 
@@ -100,7 +114,7 @@ class HistoryTab(ctk.CTkFrame):
         )
         self.btn_clear_filters.pack(side="left", padx=20)
 
-        # --- 3. Tabela (Treeview) ---
+        # --- 3. Tabela Treeview (Listagem) ---
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
         self.container.grid_columnconfigure(0, weight=1)
@@ -113,8 +127,7 @@ class HistoryTab(ctk.CTkFrame):
         selected_bg = "#1f538d"
         header_bg = "#1f1f1f"
         
-        style.configure("Treeview", background=bg_color, foreground=text_color, 
-                        fieldbackground=bg_color, rowheight=25, borderwidth=0, font=("Roboto", 11))
+        style.configure("Treeview", background=bg_color, foreground=text_color, fieldbackground=bg_color, rowheight=25, borderwidth=0, font=("Roboto", 11))
         style.map('Treeview', background=[('selected', selected_bg)])
         style.configure("Treeview.Heading", background=header_bg, foreground=text_color, relief="flat", font=("Roboto", 11, "bold"))
         style.map("Treeview.Heading", background=[('active', '#343638')])
@@ -163,8 +176,8 @@ class HistoryTab(ctk.CTkFrame):
 
     def update_table(self, items):
         """Recebe os dados do ViewModel e armazena na memória local."""
-        self.all_data = items # Salva cópia completa: (id, termo, ano, pagina, data, url)
-        self._apply_filters() # Popula a árvore aplicando filtros atuais (se houver)
+        self.all_data = items # Guarda cópia completa: (id, termo, ano, pagina, data, url)
+        self._apply_filters() # Popula a árvore aplicando filtros
 
     def _apply_filters(self, event=None):
         """Filtra self.all_data e atualiza a visualização."""
@@ -183,7 +196,7 @@ class HistoryTab(ctk.CTkFrame):
             termo = str(item[1]).lower()
             ano = str(item[2]).lower()
 
-            # Lógica de Match (contém)
+            # Verifica se corresponde aos filtros
             match_term = filter_term in termo if filter_term else True
             match_year = filter_year in ano if filter_year else True
 
@@ -197,19 +210,29 @@ class HistoryTab(ctk.CTkFrame):
         self.entry_filter_year.delete(0, "end")
         self._apply_filters()
 
+    def set_stop_button_state(self, state):
+        """Habilita ou desabilita o botão parar (True=Normal, False=Disabled)"""
+        s = "normal" if state else "disabled"
+        self.btn_stop.configure(state=s)
+
+    def _on_stop_click(self):
+        if self.on_stop_callback:
+            self.on_stop_callback()
+        
     def _on_deep_scrape_click(self):
-        if messagebox.askyesno("Confirmar DeepScrap", "Isso irá buscar TODAS as páginas seguintes para cada pesquisa iniciada (Página 1).\n\nEste processo pode ser longo. Deseja continuar?"):
-            self.on_deep_scrape_callback()
+        if messagebox.askyesno("Confirmar DeepScrap", "Buscar TODAS as páginas seguintes?\nO sistema verificará páginas já baixadas e continuará de onde parou."):
+            if self.on_deep_scrape_callback:
+                self.on_deep_scrape_callback()
 
     def _setup_context_menu(self):
         self.context_menu = tk.Menu(self, tearoff=0, bg="#2b2b2b", fg="white", activebackground="#1f538d", activeforeground="white")
-        self.context_menu.add_command(label="📄 Visualizar HTML (Navegador)", command=self._on_browser)
+        self.context_menu.add_command(label="📄 Visualizar HTML", command=self._on_browser)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="➡️ Buscar Todas as Páginas Seguintes", command=self._on_pagination)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="⛏️ Extrair Links (PLB)", command=self._on_extract)
+        self.context_menu.add_command(label="⛏️ Extrair Links", command=self._on_extract)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="🗑️ Excluir Registro", command=self._on_delete)
+        self.context_menu.add_command(label="🗑️ Excluir", command=self._on_delete)
 
     def _get_selected_db_id(self):
         selected = self.tree.selection()
@@ -231,18 +254,19 @@ class HistoryTab(ctk.CTkFrame):
 
     def _on_browser(self):
         db_id = self._get_selected_db_id()
-        if db_id: self.on_browser_callback(db_id)
+        if db_id and self.on_browser_callback: self.on_browser_callback(db_id)
 
     def _on_pagination(self):
         db_id = self._get_selected_db_id()
-        if db_id: self.on_pagination_callback(db_id)
+        if db_id and self.on_pagination_callback: self.on_pagination_callback(db_id)
 
     def _on_extract(self):
         db_id = self._get_selected_db_id()
-        if db_id: self.on_extract_callback(db_id)
+        if db_id and self.on_extract_callback: self.on_extract_callback(db_id)
 
     def _on_delete(self):
         db_id = self._get_selected_db_id()
-        if db_id:
+        if db_id and self.on_delete_callback:
             if messagebox.askyesno("Confirmar", "Deseja excluir este histórico e seus dados extraídos?"):
                 self.on_delete_callback(db_id)
+

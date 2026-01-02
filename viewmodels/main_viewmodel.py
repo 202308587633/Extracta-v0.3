@@ -524,12 +524,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         finally:
             self.view.toggle_button(True)
 
-    def __init__(self, view):
-        self.view = view
-        self.db = DatabaseModel(db_name=config.DB_NAME)
-        self.scraper = ScraperModel()
-        self.current_history_id = None
-
     def delete_history_item(self, history_id):
         """Remove um item do histórico pelo ID."""
         try:
@@ -585,117 +579,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
                 self._log("Nenhum dado encontrado.", "red")
         except Exception as e:
             self._log(f"Erro na extração: {e}", "red")
-
-    def check_pagination_and_scrape(self, history_id):
-        """Menu de contexto individual: Busca TODAS as páginas seguintes deste item."""
-        try:
-            record = self.db.get_plb_by_id(history_id)
-            if not record: return
-            
-            url = record[1]
-            html = record[2]
-            # Tenta recuperar termo e ano para manter consistência
-            term = record[3] if len(record) > 3 else None
-            year = record[4] if len(record) > 4 else None
-            
-            # Descobre total de páginas analisando o HTML
-            max_page = self._extract_max_page(html)
-            
-            if max_page > 1:
-                self._log(f"Iniciando DeepScrap individual (Total: {max_page} páginas)...", "yellow")
-                self.view.toggle_button(False)
-                # Inicia a thread que baixa da página 2 até max_page
-                threading.Thread(target=self._run_pagination_task, args=(url, max_page, term, year)).start()
-            else:
-                self._log("Esta pesquisa parece ter apenas 1 página.", "yellow")
-
-        except Exception as e:
-            self._log(f"Erro ao iniciar paginação: {e}", "red")
-
-    def scrape_all_page1_pagination(self):
-        """Botão 'DeepScrap em Massa': Encontra todas as PLBs 'Página 1' e busca TODAS as páginas seguintes."""
-        raw_items = self.db.get_plb_list()
-        page1_ids = []
-
-        for item in raw_items:
-            try:
-                url = item[1]
-                parsed = urlparse(url)
-                params = parse_qs(parsed.query)
-                page = int(params.get('page', ['1'])[0])
-                if page == 1:
-                    page1_ids.append(item[0]) # Salva o ID
-            except:
-                continue
-
-        if not page1_ids:
-            self._log("Nenhuma 'Página 1' encontrada para processar.", "yellow")
-            return
-
-        self._log(f"Iniciando DeepScrap em massa para {len(page1_ids)} pesquisas...", "yellow")
-        self.view.toggle_button(False)
-        threading.Thread(target=self._run_batch_deep_scraping, args=(page1_ids,)).start()
-
-    def _run_batch_deep_scraping(self, history_ids):
-        """Processa a lista de IDs sequencialmente para o DeepScrap em Massa."""
-        for index, h_id in enumerate(history_ids):
-            try:
-                record = self.db.get_plb_by_id(h_id)
-                if not record: continue
-                
-                url = record[1]
-                html = record[2]
-                term = record[3] if len(record) > 3 else None
-                year = record[4] if len(record) > 4 else None
-                
-                max_page = self._extract_max_page(html)
-                
-                if max_page > 1:
-                    self._log(f"[{index+1}/{len(history_ids)}] Processando '{term}': Buscando até pág {max_page}...", "white")
-                    # Chama a rotina de paginação (síncrona aqui dentro da thread)
-                    self._run_pagination_task_sync(url, max_page, term, year)
-                else:
-                    self._log(f"[{index+1}/{len(history_ids)}] '{term}' só tem 1 página. Pulando.", "white")
-            except Exception as e:
-                self._log(f"Erro no item {index+1}: {e}", "red")
-        
-        self.view.toggle_button(True)
-        self._log("Processo em massa finalizado.", "green")
-
-    def _run_pagination_task(self, base_url, max_page, term=None, year=None):
-        """Wrapper para thread única (DeepScrap individual)."""
-        self._run_pagination_task_sync(base_url, max_page, term, year)
-        self.view.toggle_button(True)
-        self._log("DeepScrap individual concluído.", "green")
-
-    def _run_pagination_task_sync(self, base_url, max_page, term, year):
-        """Lógica real de download sequencial das páginas (da 2 até max_page)."""
-        separator = "&" if "?" in base_url else "?"
-        
-        for i in range(2, max_page + 1):
-            # Constrói a URL da página i
-            if "page=" in base_url:
-                current_url = re.sub(r'page=\d+', f'page={i}', base_url)
-            else:
-                current_url = f"{base_url}{separator}page={i}"
-            
-            self._log(f"  -> Baixando pág {i}/{max_page}...", "yellow")
-            
-            try:
-                html = self.scraper.fetch_html(current_url)
-                if html:
-                    self.db.save_plb(current_url, html, term, year)
-                    if hasattr(self, '_update_source_ui_and_db'):
-                        self._update_source_ui_and_db(current_url, True)
-                
-                # Pequena pausa para não bloquear
-                time.sleep(1.5)
-            except Exception as e:
-                self._log(f"Falha na pág {i}: {e}", "red")
-                if hasattr(self, '_update_source_ui_and_db'):
-                    self._update_source_ui_and_db(current_url, False)
-        
-        self.view.after_thread_safe(self.load_history_list)
 
     def open_ppb_browser_from_db(self, title=None, author=None):
         """
@@ -763,3 +646,181 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         except Exception as e:
             self._log(f"Erro ao extrair paginação: {e}", "red")
             return 1
+        
+    def __init__(self, view):
+        self.view = view
+        self.db = DatabaseModel(db_name=config.DB_NAME)
+        self.scraper = ScraperModel()
+        self.current_history_id = None
+        # Flag de controle para interrupção
+        self._stop_execution = False
+
+    def stop_scraping_process(self):
+        """Sinaliza para interromper o loop de raspagem."""
+        self._stop_execution = True
+        self._log("🛑 Parando... Aguarde o fim da requisição atual.", "red")
+
+    def _reset_stop_flag(self):
+        self._stop_execution = False
+
+    def _run_pagination_task_sync(self, base_url, max_page, term, year):
+        """
+        Baixa sequencialmente as páginas.
+        - Verifica se a página já existe no banco (Resume).
+        - Verifica se o usuário pediu para parar.
+        """
+        separator = "&" if "?" in base_url else "?"
+        
+        count_new = 0
+        count_skipped = 0
+
+        for i in range(2, max_page + 1):
+            # 1. Verifica solicitação de parada
+            if self._stop_execution:
+                self._log(f"🛑 Processo interrompido na página {i-1}.", "red")
+                break
+
+            # 2. Constrói a URL da página alvo
+            if "page=" in base_url:
+                current_url = re.sub(r'page=\d+', f'page={i}', base_url)
+            else:
+                current_url = f"{base_url}{separator}page={i}"
+            
+            # 3. VERIFICAÇÃO DE EXISTÊNCIA (Resume)
+            # Se a URL já estiver no banco, pula para a próxima
+            if hasattr(self.db, 'check_url_exists') and self.db.check_url_exists(current_url):
+                # Loga apenas a cada 10 para não poluir, ou se for o primeiro pulo
+                if count_skipped == 0 or i % 10 == 0:
+                    self._log(f"  -> Pág {i} já salva no banco. Pulando...", "white")
+                count_skipped += 1
+                continue
+
+            # 4. Baixa se não existir
+            self._log(f"  -> Baixando pág {i}/{max_page}...", "yellow")
+            
+            try:
+                html = self.scraper.fetch_html(current_url)
+                if html:
+                    self.db.save_plb(current_url, html, term, year)
+                    if hasattr(self, '_update_source_ui_and_db'):
+                        self._update_source_ui_and_db(current_url, True)
+                    count_new += 1
+                
+                # Pausa para não bloquear o IP
+                time.sleep(1.5)
+
+            except Exception as e:
+                self._log(f"Falha na pág {i}: {e}", "red")
+                if hasattr(self, '_update_source_ui_and_db'):
+                    self._update_source_ui_and_db(current_url, False)
+        
+        # Log final do item
+        if count_new > 0 or count_skipped > 0:
+            msg = f"Item finalizado. Novos: {count_new} | Já existiam: {count_skipped}"
+            self._log(msg, "green")
+        
+        self.view.after_thread_safe(self.load_history_list)
+
+    def _run_pagination_task(self, base_url, max_page, term=None, year=None):
+        self._reset_stop_flag()
+        self._run_pagination_task_sync(base_url, max_page, term, year)
+        
+        # Restaura botões
+        self.view.toggle_button(True)
+        if hasattr(self.view, 'toggle_stop_button'):
+            self.view.toggle_stop_button(False)
+            
+        self._log("DeepScrap individual concluído.", "green")
+
+    def _run_batch_deep_scraping(self, history_ids):
+        self._reset_stop_flag()
+        total = len(history_ids)
+        
+        for index, h_id in enumerate(history_ids):
+            # Verifica parada entre os itens do lote
+            if self._stop_execution:
+                break
+
+            try:
+                record = self.db.get_plb_by_id(h_id)
+                if not record: continue
+                
+                url = record[1]
+                html = record[2]
+                term = record[3]
+                year = record[4]
+                
+                max_page = self._extract_max_page(html)
+                
+                if max_page > 1:
+                    self._log(f"[{index+1}/{total}] Processando '{term}': Total {max_page} págs.", "white")
+                    self._run_pagination_task_sync(url, max_page, term, year)
+                else:
+                    self._log(f"[{index+1}/{total}] '{term}' só tem 1 página. Verificado.", "white")
+            except Exception as e:
+                self._log(f"Erro no item {index+1}: {e}", "red")
+        
+        # Restaura botões
+        self.view.toggle_button(True)
+        if hasattr(self.view, 'toggle_stop_button'):
+            self.view.toggle_stop_button(False)
+
+        if self._stop_execution:
+            self._log("Processo interrompido pelo usuário.", "red")
+        else:
+            self._log("Processo em massa finalizado.", "green")
+
+    def check_pagination_and_scrape(self, history_id):
+        try:
+            record = self.db.get_plb_by_id(history_id)
+            if not record: return
+            
+            url = record[1]
+            html = record[2]
+            term = record[3] if len(record) > 3 else None
+            year = record[4] if len(record) > 4 else None
+            
+            max_page = self._extract_max_page(html)
+            
+            if max_page > 1:
+                self._log(f"Iniciando DeepScrap individual (Total: {max_page} páginas)...", "yellow")
+                
+                # Bloqueia botão iniciar, libera botão parar
+                self.view.toggle_button(False)
+                if hasattr(self.view, 'toggle_stop_button'):
+                    self.view.toggle_stop_button(True)
+                
+                threading.Thread(target=self._run_pagination_task, args=(url, max_page, term, year)).start()
+            else:
+                self._log("Esta pesquisa parece ter apenas 1 página.", "yellow")
+
+        except Exception as e:
+            self._log(f"Erro ao iniciar paginação: {e}", "red")
+
+    def scrape_all_page1_pagination(self):
+        raw_items = self.db.get_plb_list()
+        page1_ids = []
+
+        for item in raw_items:
+            try:
+                url = item[1]
+                parsed = urlparse(url)
+                params = parse_qs(parsed.query)
+                page = int(params.get('page', ['1'])[0])
+                if page == 1:
+                    page1_ids.append(item[0]) 
+            except:
+                continue
+
+        if not page1_ids:
+            self._log("Nenhuma 'Página 1' encontrada para processar.", "yellow")
+            return
+
+        self._log(f"Iniciando DeepScrap em massa para {len(page1_ids)} pesquisas...", "yellow")
+        
+        # Bloqueia botão iniciar, libera botão parar
+        self.view.toggle_button(False)
+        if hasattr(self.view, 'toggle_stop_button'):
+            self.view.toggle_stop_button(True)
+            
+        threading.Thread(target=self._run_batch_deep_scraping, args=(page1_ids,)).start()

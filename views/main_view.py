@@ -107,6 +107,7 @@ class MainView(ctk.CTk):
         return None, None
 
     def _setup_tabs(self):
+        """Configura as abas e injeta as dependências do ViewModel"""
         self.tabview = ctk.CTkTabview(self)
         self.tabview.grid(row=0, column=1, padx=10, pady=(10, 0), sticky="nsew")
         
@@ -115,8 +116,8 @@ class MainView(ctk.CTk):
 
         # Adicionando as abas
         self.tabview.add("Início")
-        self.tabview.add("Histórico")
         self.tabview.add("Resultados")
+        self.tabview.add("Histórico")
         self.tabview.add("Conteúdo PPB")
         self.tabview.add("Conteúdo PPR")
         self.tabview.add("Fontes")
@@ -141,17 +142,17 @@ class MainView(ctk.CTk):
         # --- 3. Aba Histórico ---
         self.history_tab = HistoryTab(
             parent=self.tabview.tab("Histórico"),
-            on_select_callback=None,
+            on_select_callback=None, # Não utilizado na nova tabela
             on_delete_callback=self.viewmodel.delete_history_item,
             on_pagination_callback=self.viewmodel.check_pagination_and_scrape,
             on_extract_callback=self.viewmodel.extract_data_command,
             on_browser_callback=self.viewmodel.open_plb_in_browser,
-            on_deep_scrape_callback=self.viewmodel.scrape_all_page1_pagination
+            on_deep_scrape_callback=self.viewmodel.scrape_all_page1_pagination,
+            on_stop_callback=self.viewmodel.stop_scraping_process # <--- NOVO CALLBACK PARA O BOTÃO PARAR
         )
         self.history_tab.pack(fill="both", expand=True)
 
         # --- 4. Aba Conteúdo PPB ---
-        # CORREÇÃO: Passando o callback obrigatório
         self.content_tab = ContentTab(
             parent=self.tabview.tab("Conteúdo PPB"),
             on_browser_callback=self.viewmodel.open_ppb_browser_from_db
@@ -159,7 +160,6 @@ class MainView(ctk.CTk):
         self.content_tab.pack(fill="both", expand=True)
 
         # --- 5. Aba Conteúdo PPR ---
-        # CORREÇÃO: Passando o callback obrigatório
         self.repo_tab = RepoTab(
             parent=self.tabview.tab("Conteúdo PPR"),
             on_browser_callback=self.viewmodel.open_ppr_in_browser
@@ -174,7 +174,7 @@ class MainView(ctk.CTk):
         self.log_tab = LogTab(parent=self.tabview.tab("Logs"))
         self.log_tab.pack(fill="both", expand=True)
         
-        # --- Barra de Status ---
+        # --- Barra de Status (Rodapé) ---
         self.status_container = ctk.CTkFrame(self, height=30, corner_radius=0)
         self.status_container.grid(row=1, column=1, sticky="ew", padx=10, pady=10)
         
@@ -184,3 +184,8 @@ class MainView(ctk.CTk):
         # Estado Inicial das abas de conteúdo
         self.after(100, lambda: self.set_tab_state("Conteúdo PPB", "disabled"))
         self.after(100, lambda: self.set_tab_state("Conteúdo PPR", "disabled"))
+
+    def toggle_stop_button(self, state):
+        """Controla se o botão de parar está habilitado ou não."""
+        if hasattr(self, 'history_tab'):
+            self.after_thread_safe(lambda: self.history_tab.set_stop_button_state(state))

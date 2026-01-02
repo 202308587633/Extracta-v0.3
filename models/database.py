@@ -14,34 +14,11 @@ class DatabaseModel:
                 """, (res[0], url, html_content))
                 conn.commit()
 
-    def get_extracted_html(self, title, author):
-        """Recupera o HTML da PPB via relação com pesquisas."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT b.html_content 
-                FROM ppb b
-                JOIN pesquisas p ON b.pesquisa_id = p.id
-                WHERE p.title = ? AND p.author = ?
-            """, (title, author))
-            result = cursor.fetchone()
-            return result[0] if result else None
-
     def delete_history(self, plb_id):
         """Remove uma PLB da tabela plb."""
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM plb WHERE id = ?", (plb_id,))
-            conn.commit()
-
-    def save_pesquisas(self, data_list):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            for item in data_list:
-                cursor.execute("""
-                    INSERT OR IGNORE INTO pesquisas (title, author, ppb_link, ppr_link)
-                    VALUES (?, ?, ?, ?)
-                """, (item.get('title'), item.get('author'), item.get('ppb_link'), item.get('ppr_link')))
             conn.commit()
 
     def get_plb_content(self, plb_id):
@@ -89,11 +66,6 @@ class DatabaseModel:
                 return result if result else (None, None)
         except sqlite3.Error as e:
             raise Exception(f"Erro na consulta SQL (PPR Full): {e}")
-
-    def __init__(self, db_name="database.db"):
-        self.db_name = db_name
-        self._init_db()
-        self._check_and_migrate()
 
     def _init_db(self):
         with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
@@ -177,46 +149,6 @@ class DatabaseModel:
             
             conn.commit()
 
-    def save_plb(self, url, html_content, term=None, year=None):
-        """Salva a página de lista (PLB) com termo e ano."""
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO plb (url, html_content, search_term, search_year) 
-                    VALUES (?, ?, ?, ?)
-                """, (url, html_content, term, year))
-                conn.commit()
-        except sqlite3.Error as e:
-            raise Exception(f"Erro ao salvar PLB: {e}")
-
-    def get_plb_list(self):
-        """Retorna lista de PLBs incluindo termo e ano."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, url, created_at, search_term, search_year 
-                FROM plb 
-                ORDER BY created_at DESC
-            """)
-            return cursor.fetchall()
-
-    def get_plb_by_id(self, plb_id):
-        """Retorna detalhes de uma PLB específica."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, url, html_content, search_term, search_year 
-                FROM plb WHERE id = ?
-            """, (plb_id,))
-            return cursor.fetchone()
-
-    def save_log(self, message):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO logs (message) VALUES (?)", (message,))
-            conn.commit()
-
     def save_ppb_content(self, url, html_content):
         # Lógica de vínculo com pesquisa baseada na URL
         try:
@@ -251,13 +183,6 @@ class DatabaseModel:
         except sqlite3.Error as e:
             raise Exception(f"Erro de Banco de Dados (PPR): {e}")
 
-    def get_all_pesquisas(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM pesquisas ORDER BY extracted_at DESC")
-            cols = [description[0] for description in cursor.description]
-            return [dict(zip(cols, row)) for row in cursor.fetchall()]
-
     def get_pending_ppr_records(self):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
@@ -273,23 +198,6 @@ class DatabaseModel:
             """)
             return cursor.fetchall()
 
-    def save_source_status(self, root_url, status):
-        val = 1 if status else 0
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO sources (root_url, status) 
-                VALUES (?, ?)
-                ON CONFLICT(root_url) DO UPDATE SET status = excluded.status
-            """, (root_url, val))
-            conn.commit()
-
-    def get_all_sources(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT root_url, status FROM sources")
-            return {row[0]: bool(row[1]) for row in cursor.fetchall()}
-            
     def get_source_status(self, root_url):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
@@ -321,6 +229,106 @@ class DatabaseModel:
                 conn.commit()
         except sqlite3.Error as e:
             raise Exception(f"Erro ao atualizar dados da universidade: {e}")
+
+    def __init__(self, db_name="database.db"):
+        self.db_name = db_name
+        self._init_db()
+        self._check_and_migrate()
+
+    def check_url_exists(self, url):
+        """Verifica se uma URL já existe na tabela PLB."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM plb WHERE url = ? LIMIT 1", (url,))
+                return cursor.fetchone() is not None
+        except sqlite3.Error:
+            return False
+    
+    def get_plb_list(self):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, url, created_at, search_term, search_year 
+                FROM plb 
+                ORDER BY created_at DESC
+            """)
+            return cursor.fetchall()
+
+    def get_plb_by_id(self, plb_id):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, url, html_content, search_term, search_year 
+                FROM plb WHERE id = ?
+            """, (plb_id,))
+            return cursor.fetchone()
+
+    def save_plb(self, url, html_content, term=None, year=None):
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO plb (url, html_content, search_term, search_year) 
+                    VALUES (?, ?, ?, ?)
+                """, (url, html_content, term, year))
+                conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro ao salvar PLB: {e}")
+            
+    def save_log(self, message):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO logs (message) VALUES (?)", (message,))
+            conn.commit()
+            
+    def get_all_sources(self):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT root_url, status FROM sources")
+            return {row[0]: bool(row[1]) for row in cursor.fetchall()}
+    
+    def save_source_status(self, root_url, status):
+        val = 1 if status else 0
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO sources (root_url, status) 
+                VALUES (?, ?)
+                ON CONFLICT(root_url) DO UPDATE SET status = excluded.status
+            """, (root_url, val))
+            conn.commit()
+
+    def get_all_pesquisas(self):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM pesquisas ORDER BY extracted_at DESC")
+            cols = [description[0] for description in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+            
+    def save_pesquisas(self, data):
+        # Implementação simplificada de save_pesquisas para o contexto
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            for item in data:
+                try:
+                    cursor.execute("""
+                        INSERT INTO pesquisas (title, author, ppb_link, ppr_link, univ_sigla, univ_nome, programa)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        item.get('title'), item.get('author'), item.get('link_page'), 
+                        item.get('link_file'), item.get('sigla'), item.get('universidade'), item.get('programa')
+                    ))
+                except sqlite3.IntegrityError:
+                    pass # Ignora duplicatas de ppb_link
+            conn.commit()
+            
+    def get_extracted_html(self, title, author):
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT html_content FROM ppb JOIN pesquisas ON ppb.pesquisa_id = pesquisas.id WHERE title=? AND author=?", (title, author))
+            res = cursor.fetchone()
+            return res[0] if res else None
 
     def delete_plb(self, plb_id):
         try:
