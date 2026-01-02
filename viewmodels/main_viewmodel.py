@@ -250,27 +250,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         root = self._extract_root_url(url)
         self.view.update_source_status(root, success)
 
-    def initialize_data(self):
-        """Carrega dados iniciais: PLBs, Pesquisas e agora as FONTES salvas."""
-        self.load_history_list()
-        
-        # 1. Carrega Fontes salvas e atualiza a aba
-        try:
-            sources = self.db.get_all_sources()
-            for root, status in sources.items():
-                # Atualiza a UI sem salvar no banco novamente (pois já veio de lá)
-                self.view.update_source_status(root, status)
-        except Exception as e:
-            self._log(f"Erro ao carregar fontes: {e}", "red")
-
-        # 2. Carrega Resultados
-        try:
-            saved_data = self.db.get_all_pesquisas() 
-            if saved_data:
-                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
-        except Exception as e:
-            self._log(f"Erro ao carregar dados salvos: {e}", "red")
-
     def _extract_root_url(self, url):
         try:
             parsed = urlparse(url)
@@ -504,25 +483,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         # Passa term e year para a thread
         thread = threading.Thread(target=self._run_task, args=(url, term, year))
         thread.start()
-
-    def _run_task(self, url, term=None, year=None):
-        try:
-            html = self.scraper.fetch_html(url)
-            
-            # NOVO: Passa term e year para o método save_plb
-            # (Certifique-se que db.save_plb aceita esses argumentos)
-            self.db.save_plb(url, html, term, year)
-            
-            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
-            self.view.after_thread_safe(self.load_history_list)
-            
-            self._update_source_ui_and_db(url, True)
-            self._log("PLB capturada e salva com sucesso.", "green")
-        except Exception as e:
-            self._update_source_ui_and_db(url, False)
-            self._log(str(e), "red")
-        finally:
-            self.view.toggle_button(True)
 
     def delete_history_item(self, history_id):
         """Remove um item do histórico pelo ID."""
@@ -824,3 +784,60 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self.view.toggle_stop_button(True)
             
         threading.Thread(target=self._run_batch_deep_scraping, args=(page1_ids,)).start()
+
+    def initialize_data(self):
+        """Carrega dados iniciais e aplica filtros de exclusão na Home Tab (remove pesquisas já feitas)."""
+        self.load_history_list()
+        
+        # 1. Carrega Status das Fontes
+        try:
+            if hasattr(self.db, 'get_all_sources'):
+                sources = self.db.get_all_sources()
+                for root, status in sources.items():
+                    self.view.update_source_status(root, status)
+        except Exception: 
+            pass
+
+        # 2. Carrega Resultados Salvos
+        try:
+            saved_data = self.db.get_all_pesquisas() 
+            if saved_data:
+                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
+        except Exception as e:
+            self._log(f"Erro ao carregar resultados: {e}", "red")
+
+        # 3. Carrega histórico para FILTRAR (remover) opções já pesquisadas na Home
+        try:
+            # Verifica se o método existe no DB antes de chamar (segurança)
+            if hasattr(self.db, 'get_existing_searches'):
+                existing_combinations = self.db.get_existing_searches()
+                # Envia para a View processar a filtragem das comboboxes
+                self.view.after_thread_safe(lambda: self.view.filter_home_options(existing_combinations))
+        except Exception as e:
+            self._log(f"Erro ao carregar filtros de histórico: {e}", "yellow")
+
+    def _run_task(self, url, term=None, year=None):
+        """Executa a tarefa de scraping de uma PLB."""
+        try:
+            html = self.scraper.fetch_html(url)
+            
+            # Salva no banco
+            self.db.save_plb(url, html, term, year)
+            
+            # Atualiza a interface (HTML e Histórico)
+            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
+            self.view.after_thread_safe(self.load_history_list)
+            
+            # ATUALIZAÇÃO IMPORTANTE: Recarrega os dados para remover a pesquisa recém-concluída das opções
+            self.initialize_data()
+            
+            if hasattr(self, '_update_source_ui_and_db'):
+                self._update_source_ui_and_db(url, True)
+            
+            self._log("PLB capturada e salva com sucesso.", "green")
+        except Exception as e:
+            if hasattr(self, '_update_source_ui_and_db'):
+                self._update_source_ui_and_db(url, False)
+            self._log(str(e), "red")
+        finally:
+            self.view.toggle_button(True)

@@ -133,22 +133,6 @@ class DatabaseModel:
             conn.commit()
             self._check_and_migrate()
 
-    def _check_and_migrate(self):
-        """Verifica se as tabelas precisam de colunas novas (Migração)."""
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            
-            # Verifica colunas da tabela PLB
-            cursor.execute("PRAGMA table_info(plb)")
-            columns = [info[1] for info in cursor.fetchall()]
-            
-            if 'search_term' not in columns:
-                cursor.execute("ALTER TABLE plb ADD COLUMN search_term TEXT")
-            if 'search_year' not in columns:
-                cursor.execute("ALTER TABLE plb ADD COLUMN search_year TEXT")
-            
-            conn.commit()
-
     def save_ppb_content(self, url, html_content):
         # Lógica de vínculo com pesquisa baseada na URL
         try:
@@ -245,16 +229,6 @@ class DatabaseModel:
         except sqlite3.Error:
             return False
     
-    def get_plb_list(self):
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT id, url, created_at, search_term, search_year 
-                FROM plb 
-                ORDER BY created_at DESC
-            """)
-            return cursor.fetchall()
-
     def get_plb_by_id(self, plb_id):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
@@ -264,18 +238,6 @@ class DatabaseModel:
             """, (plb_id,))
             return cursor.fetchone()
 
-    def save_plb(self, url, html_content, term=None, year=None):
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO plb (url, html_content, search_term, search_year) 
-                    VALUES (?, ?, ?, ?)
-                """, (url, html_content, term, year))
-                conn.commit()
-        except sqlite3.Error as e:
-            raise Exception(f"Erro ao salvar PLB: {e}")
-            
     def save_log(self, message):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
@@ -338,3 +300,73 @@ class DatabaseModel:
                 conn.commit()
         except sqlite3.Error as e:
             raise Exception(f"Erro ao excluir histórico: {e}")
+
+    def _check_and_migrate(self):
+        """Garante que as colunas de termo e ano existam na tabela PLB."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("PRAGMA table_info(plb)")
+                columns = [info[1] for info in cursor.fetchall()]
+                
+                if 'search_term' not in columns:
+                    cursor.execute("ALTER TABLE plb ADD COLUMN search_term TEXT")
+                if 'search_year' not in columns:
+                    cursor.execute("ALTER TABLE plb ADD COLUMN search_year TEXT")
+                conn.commit()
+        except sqlite3.Error:
+            pass # Ignora erros de migração se o banco estiver bloqueado
+
+    def get_existing_searches(self):
+        """
+        Retorna uma lista de tuplas (termo, ano) que já estão salvas no banco.
+        Usado para filtrar as opções na aba Home e evitar retrabalho.
+        """
+        try:
+            self._check_and_migrate() # Garante que as colunas existem
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    SELECT DISTINCT search_term, search_year 
+                    FROM plb 
+                    WHERE search_term IS NOT NULL 
+                      AND search_year IS NOT NULL 
+                      AND search_term != ''
+                """)
+                return cursor.fetchall()
+        except sqlite3.Error:
+            return []
+
+    def save_plb(self, url, html_content, term=None, year=None):
+        """Salva a página PLB com os metadados de termo e ano."""
+        try:
+            self._check_and_migrate() # Garante que as colunas existem
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO plb (url, html_content, search_term, search_year) 
+                    VALUES (?, ?, ?, ?)
+                """, (url, html_content, term, year))
+                conn.commit()
+        except sqlite3.Error as e:
+            raise Exception(f"Erro ao salvar PLB: {e}")
+
+    def get_plb_list(self):
+        """Retorna histórico para a tabela, lidando com colunas novas ou antigas."""
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            try:
+                # Tenta buscar com as novas colunas
+                cursor.execute("""
+                    SELECT id, url, created_at, search_term, search_year 
+                    FROM plb 
+                    ORDER BY created_at DESC
+                """)
+            except sqlite3.OperationalError:
+                # Fallback para banco antigo sem as colunas
+                cursor.execute("""
+                    SELECT id, url, created_at, NULL, NULL 
+                    FROM plb 
+                    ORDER BY created_at DESC
+                """)
+            return cursor.fetchall()
