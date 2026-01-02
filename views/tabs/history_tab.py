@@ -35,7 +35,7 @@ class HistoryTab(ctk.CTkFrame):
         self.textbox_content.delete("0.0", "end")
         self.textbox_content.insert("0.0", html_content)
         self.textbox_content.configure(state="disabled")
-        
+
     def __init__(self, parent, on_select_callback, on_delete_callback, on_pagination_callback, on_extract_callback, on_browser_callback, on_deep_scrape_callback):
         super().__init__(parent)
         self.on_select_callback = on_select_callback
@@ -44,22 +44,25 @@ class HistoryTab(ctk.CTkFrame):
         self.on_extract_callback = on_extract_callback
         self.on_browser_callback = on_browser_callback
         self.on_deep_scrape_callback = on_deep_scrape_callback
-        self.item_map = {} 
+        
+        self.item_map = {} # Mapeia ID da Treeview -> ID do Banco
+        self.all_data = [] # Armazena todos os dados brutos para filtragem
+        
         self._setup_ui()
         self._setup_context_menu()
 
     def _setup_ui(self):
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(2, weight=1) # Tabela expande na linha 2
 
-        # Cabeçalho
+        # --- 1. Cabeçalho Superior ---
         self.header_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.header_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
         
         self.lbl_title = ctk.CTkLabel(self.header_frame, text="Histórico de Pesquisas (PLB)", font=("Roboto", 16, "bold"))
         self.lbl_title.pack(side="left")
 
-        # BOTÃO: DeepScrap em Massa (Todas as páginas)
+        # Botão DeepScrap
         self.btn_deep_all = ctk.CTkButton(
             self.header_frame, 
             text="📚 DeepScrap (Todas as Páginas)", 
@@ -70,9 +73,36 @@ class HistoryTab(ctk.CTkFrame):
         )
         self.btn_deep_all.pack(side="right", padx=5)
 
-        # Tabela (Treeview)
+        # --- 2. Barra de Filtros (NOVO) ---
+        self.filter_frame = ctk.CTkFrame(self)
+        self.filter_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
+        
+        # Filtro: Termo
+        ctk.CTkLabel(self.filter_frame, text="Filtrar Termo:", font=("Roboto", 12)).pack(side="left", padx=(10, 5))
+        self.entry_filter_term = ctk.CTkEntry(self.filter_frame, width=200, placeholder_text="Digite para filtrar...")
+        self.entry_filter_term.pack(side="left", padx=5)
+        # Vincula evento de digitação (KeyRelease)
+        self.entry_filter_term.bind("<KeyRelease>", self._apply_filters)
+
+        # Filtro: Ano
+        ctk.CTkLabel(self.filter_frame, text="Filtrar Ano:", font=("Roboto", 12)).pack(side="left", padx=(20, 5))
+        self.entry_filter_year = ctk.CTkEntry(self.filter_frame, width=100, placeholder_text="Ex: 2024")
+        self.entry_filter_year.pack(side="left", padx=5)
+        self.entry_filter_year.bind("<KeyRelease>", self._apply_filters)
+
+        # Botão Limpar Filtros
+        self.btn_clear_filters = ctk.CTkButton(
+            self.filter_frame, 
+            text="❌ Limpar", 
+            width=80, 
+            fg_color="gray", 
+            command=self._clear_filters
+        )
+        self.btn_clear_filters.pack(side="left", padx=20)
+
+        # --- 3. Tabela (Treeview) ---
         self.container = ctk.CTkFrame(self, fg_color="transparent")
-        self.container.grid(row=1, column=0, sticky="nsew", padx=10, pady=5)
+        self.container.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
         self.container.grid_columnconfigure(0, weight=1)
         self.container.grid_rowconfigure(0, weight=1)
 
@@ -92,11 +122,12 @@ class HistoryTab(ctk.CTkFrame):
         columns = ("id", "termo", "ano", "pagina", "data")
         self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="browse")
 
-        self.tree.heading("id", text="ID")
-        self.tree.heading("termo", text="Termo Pesquisado")
-        self.tree.heading("ano", text="Ano")
-        self.tree.heading("pagina", text="Pág.")
-        self.tree.heading("data", text="Data/Hora")
+        # Configuração dos Cabeçalhos com COMANDO DE ORDENAÇÃO
+        self.tree.heading("id", text="ID", command=lambda: self._sort_column("id", False))
+        self.tree.heading("termo", text="Termo Pesquisado", command=lambda: self._sort_column("termo", False))
+        self.tree.heading("ano", text="Ano", command=lambda: self._sort_column("ano", False))
+        self.tree.heading("pagina", text="Pág.", command=lambda: self._sort_column("pagina", False))
+        self.tree.heading("data", text="Data/Hora", command=lambda: self._sort_column("data", False))
 
         self.tree.column("id", width=40, anchor="center")
         self.tree.column("termo", width=300, anchor="w")
@@ -113,6 +144,59 @@ class HistoryTab(ctk.CTkFrame):
         self.tree.bind("<Button-3>", self._show_context_menu)
         self.tree.bind("<Double-1>", self._on_double_click)
 
+    def _sort_column(self, col, reverse):
+        """Ordena a árvore baseada na coluna clicada."""
+        l = [(self.tree.set(k, col), k) for k in self.tree.get_children('')]
+        
+        # Tenta converter para número para ordenar corretamente IDs e Anos
+        try:
+            l.sort(key=lambda t: int(t[0]) if t[0].isdigit() else t[0].lower(), reverse=reverse)
+        except ValueError:
+            l.sort(reverse=reverse)
+
+        # Reorganiza os itens
+        for index, (val, k) in enumerate(l):
+            self.tree.move(k, '', index)
+
+        # Alterna a ordem para o próximo clique
+        self.tree.heading(col, command=lambda: self._sort_column(col, not reverse))
+
+    def update_table(self, items):
+        """Recebe os dados do ViewModel e armazena na memória local."""
+        self.all_data = items # Salva cópia completa: (id, termo, ano, pagina, data, url)
+        self._apply_filters() # Popula a árvore aplicando filtros atuais (se houver)
+
+    def _apply_filters(self, event=None):
+        """Filtra self.all_data e atualiza a visualização."""
+        filter_term = self.entry_filter_term.get().lower().strip()
+        filter_year = self.entry_filter_year.get().lower().strip()
+
+        # Limpa tabela atual
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        self.item_map.clear()
+
+        # Filtra e Reinsere
+        for item in self.all_data:
+            # item = (id, termo, ano, pagina, data, url)
+            db_id = item[0]
+            termo = str(item[1]).lower()
+            ano = str(item[2]).lower()
+
+            # Lógica de Match (contém)
+            match_term = filter_term in termo if filter_term else True
+            match_year = filter_year in ano if filter_year else True
+
+            if match_term and match_year:
+                values = (item[0], item[1], item[2], item[3], item[4])
+                tree_id = self.tree.insert("", "end", values=values)
+                self.item_map[tree_id] = db_id
+
+    def _clear_filters(self):
+        self.entry_filter_term.delete(0, "end")
+        self.entry_filter_year.delete(0, "end")
+        self._apply_filters()
+
     def _on_deep_scrape_click(self):
         if messagebox.askyesno("Confirmar DeepScrap", "Isso irá buscar TODAS as páginas seguintes para cada pesquisa iniciada (Página 1).\n\nEste processo pode ser longo. Deseja continuar?"):
             self.on_deep_scrape_callback()
@@ -121,21 +205,11 @@ class HistoryTab(ctk.CTkFrame):
         self.context_menu = tk.Menu(self, tearoff=0, bg="#2b2b2b", fg="white", activebackground="#1f538d", activeforeground="white")
         self.context_menu.add_command(label="📄 Visualizar HTML (Navegador)", command=self._on_browser)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="➡️ Buscar Todas as Páginas Seguintes", command=self._on_pagination) # Texto atualizado
+        self.context_menu.add_command(label="➡️ Buscar Todas as Páginas Seguintes", command=self._on_pagination)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="⛏️ Extrair Links (PLB)", command=self._on_extract)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="🗑️ Excluir Registro", command=self._on_delete)
-
-    def update_table(self, items):
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-        self.item_map.clear()
-        if not items: return
-        for item in items:
-            values = (item[0], item[1], item[2], item[3], item[4])
-            tree_id = self.tree.insert("", "end", values=values)
-            self.item_map[tree_id] = item[0]
 
     def _get_selected_db_id(self):
         selected = self.tree.selection()
