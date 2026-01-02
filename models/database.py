@@ -401,15 +401,17 @@ class DatabaseModel:
                         )
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        title, author, item.get('link_page'), 
-                        item.get('link_file'), item.get('sigla'), 
-                        item.get('universidade'), item.get('programa'),
-                        term, year
+                        title, 
+                        author, 
+                        item.get('ppb_link'), # CORRIGIDO: de 'link_page' para 'ppb_link'
+                        item.get('ppr_link'), # CORRIGIDO: de 'link_file' para 'ppr_link'
+                        item.get('sigla'), 
+                        item.get('universidade'), 
+                        item.get('programa'),
+                        term, 
+                        year
                     ))
                 except sqlite3.IntegrityError:
                     # Em bancos de dados criados anteriormente, ppb_link pode ter constraint UNIQUE.
-                    # Se cairmos aqui, ignoramos para não quebrar a execução, mas o ideal 
-                    # seria recriar o banco se desejar duplicar links para termos diferentes.
                     pass
             conn.commit()
-            
