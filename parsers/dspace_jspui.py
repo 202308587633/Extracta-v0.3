@@ -100,3 +100,6 @@ class DSpaceJSPUIParser(BaseParser):
         if link:
             return urljoin(base_url, link['href'])
         return '-'
+
+    def __init__(self, sigla="-", universidade="Desconhecida"):
+        super().__init__(sigla, universidade)

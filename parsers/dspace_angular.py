@@ -4,14 +4,8 @@ from urllib.parse import urljoin
 from parsers.base_parser import BaseParser
 
 class DSpaceAngularParser(BaseParser):
-    """
-    Parser genérico para repositórios DSpace interface Angular (versões 7+).
-    """
-
-    # --- CORREÇÃO: Cria o método extract ---
     def extract(self, html_content, base_url, on_progress=None):
         return self.extract_pure_soup(html_content, base_url, on_progress)
-    # ---------------------------------------
 
     def extract_pure_soup(self, html_content, url, on_progress=None):
         soup = BeautifulSoup(html_content, 'html.parser')
@@ -78,3 +72,6 @@ class DSpaceAngularParser(BaseParser):
             if href.lower().endswith('.pdf') or '/download' in href:
                 return urljoin(base_url, href)
         return '-'
+    
+    def __init__(self, sigla="-", universidade="Desconhecida"):
+        super().__init__(sigla, universidade)

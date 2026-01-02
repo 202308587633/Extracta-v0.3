@@ -60,8 +60,8 @@ class MainView(ctk.CTk):
 
         # Adicionando as abas
         self.tabview.add("Início")
-        self.tabview.add("Resultados")
         self.tabview.add("Histórico")
+        self.tabview.add("Resultados")
         self.tabview.add("Conteúdo PPB")
         self.tabview.add("Conteúdo PPR")
         self.tabview.add("Fontes")

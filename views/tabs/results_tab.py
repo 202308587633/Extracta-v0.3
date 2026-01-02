@@ -243,9 +243,17 @@ class ResultsTab(ctk.CTkFrame):
         if not selected: return
         values = self.tree.item(selected[0])['values']
         self.viewmodel.handle_result_selection(values[0], values[1])
-
+        
     def _setup_context_menu(self):
+        """Configura o menu de contexto da tabela de resultados"""
         self.context_menu = tk.Menu(self, tearoff=0)
         self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
+        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row)
+        self.context_menu.add_separator()        
+        self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
+        self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (Item)", command=self.viewmodel.extract_univ_data)
+        self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
+        self.context_menu.add_command(label="🌍 Abrir PPR no Navegador", command=self._view_ppr_browser)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (via PPR)", command=self.viewmodel.extract_univ_data)

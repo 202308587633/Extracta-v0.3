@@ -1,0 +1,20 @@
+{
+  "mappings": [
+    { "key": "repositorio.ufba.br", "sigla": "UFBA", "name": "Universidade Federal da Bahia", "type": "jspui" },
+    { "key": ".ufba.br", "sigla": "UFBA", "name": "Universidade Federal da Bahia", "type": "jspui" },
+    { "key": "repositorio.ufc.br", "sigla": "UFC", "name": "Universidade Federal do Ceará", "type": "jspui" },
+    { "key": ".ufc.br", "sigla": "UFC", "name": "Universidade Federal do Ceará", "type": "jspui" },
+    { "key": "repositorio.ufma.br", "sigla": "UFMA", "name": "Universidade Federal do Maranhão", "type": "jspui" },
+    { "key": ".ufma.br", "sigla": "UFMA", "name": "Universidade Federal do Maranhão", "type": "jspui" },
+    { "key": "repositorio.ufsc.br", "sigla": "UFSC", "name": "Universidade Federal de Santa Catarina", "type": "jspui" },
+    { "key": ".ufsc.br", "sigla": "UFSC", "name": "Universidade Federal de Santa Catarina", "type": "jspui" },
+    { "key": "repositorio.ufpe.br", "sigla": "UFPE", "name": "Universidade Federal de Pernambuco", "type": "jspui" },
+    { "key": ".ufpe.br", "sigla": "UFPE", "name": "Universidade Federal de Pernambuco", "type": "jspui" },
+    { "key": "repositorio.unb.br", "sigla": "UnB", "name": "Universidade de Brasília", "type": "jspui" },
+    { "key": "repositorio.ufmg.br", "sigla": "UFMG", "name": "Universidade Federal de Minas Gerais", "type": "jspui" },
+    { "key": "ri.ufs.br", "sigla": "UFS", "name": "Universidade Federal de Sergipe", "type": "jspui" },
+    { "key": ".ufs.br", "sigla": "UFS", "name": "Universidade Federal de Sergipe", "type": "jspui" },
+    { "key": "lume.ufrgs.br", "sigla": "UFRGS", "name": "Universidade Federal do Rio Grande do Sul", "type": "jspui" },
+    { "key": "hdl.handle.net/10183", "sigla": "UFRGS", "name": "Universidade Federal do Rio Grande do Sul", "type": "jspui" }
+  ]
+}
