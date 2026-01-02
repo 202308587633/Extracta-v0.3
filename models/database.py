@@ -67,72 +67,6 @@ class DatabaseModel:
         except sqlite3.Error as e:
             raise Exception(f"Erro na consulta SQL (PPR Full): {e}")
 
-    def _init_db(self):
-        with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
-            conn.execute("PRAGMA journal_mode=WAL;")
-            cursor = conn.cursor()
-            
-            # Atualizamos a criação da tabela para incluir as novas colunas
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS plb (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url TEXT NOT NULL,
-                    html_content TEXT,
-                    search_term TEXT,
-                    search_year TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            # ... (Demais tabelas: pesquisas, ppb, logs, ppr, sources mantidas iguais) ...
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS pesquisas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    author TEXT,
-                    ppb_link TEXT UNIQUE,
-                    ppr_link TEXT,
-                    univ_sigla TEXT,
-                    univ_nome TEXT,
-                    programa TEXT,
-                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS ppb (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pesquisa_id INTEGER,
-                    url TEXT NOT NULL,
-                    html_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
-                )
-            """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS logs (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    message TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS ppr (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pesquisa_id INTEGER,
-                    url TEXT NOT NULL,
-                    html_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
-                )
-            """)
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sources (
-                    root_url TEXT PRIMARY KEY,
-                    status INTEGER DEFAULT 1
-                )
-            """)
-            conn.commit()
-            self._check_and_migrate()
-
     def save_ppb_content(self, url, html_content):
         # Lógica de vínculo com pesquisa baseada na URL
         try:
@@ -268,23 +202,6 @@ class DatabaseModel:
             cols = [description[0] for description in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
             
-    def save_pesquisas(self, data):
-        # Implementação simplificada de save_pesquisas para o contexto
-        with sqlite3.connect(self.db_name) as conn:
-            cursor = conn.cursor()
-            for item in data:
-                try:
-                    cursor.execute("""
-                        INSERT INTO pesquisas (title, author, ppb_link, ppr_link, univ_sigla, univ_nome, programa)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        item.get('title'), item.get('author'), item.get('link_page'), 
-                        item.get('link_file'), item.get('sigla'), item.get('universidade'), item.get('programa')
-                    ))
-                except sqlite3.IntegrityError:
-                    pass # Ignora duplicatas de ppb_link
-            conn.commit()
-            
     def get_extracted_html(self, title, author):
         with sqlite3.connect(self.db_name) as conn:
             cursor = conn.cursor()
@@ -300,22 +217,6 @@ class DatabaseModel:
                 conn.commit()
         except sqlite3.Error as e:
             raise Exception(f"Erro ao excluir histórico: {e}")
-
-    def _check_and_migrate(self):
-        """Garante que as colunas de termo e ano existam na tabela PLB."""
-        try:
-            with sqlite3.connect(self.db_name) as conn:
-                cursor = conn.cursor()
-                cursor.execute("PRAGMA table_info(plb)")
-                columns = [info[1] for info in cursor.fetchall()]
-                
-                if 'search_term' not in columns:
-                    cursor.execute("ALTER TABLE plb ADD COLUMN search_term TEXT")
-                if 'search_year' not in columns:
-                    cursor.execute("ALTER TABLE plb ADD COLUMN search_year TEXT")
-                conn.commit()
-        except sqlite3.Error:
-            pass # Ignora erros de migração se o banco estiver bloqueado
 
     def get_existing_searches(self):
         """
@@ -370,3 +271,145 @@ class DatabaseModel:
                     ORDER BY created_at DESC
                 """)
             return cursor.fetchall()
+
+    def _init_db(self):
+        with sqlite3.connect(self.db_name, check_same_thread=False) as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS plb (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    html_content TEXT,
+                    search_term TEXT,
+                    search_year TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # ATUALIZADO: Tabela pesquisas agora inclui search_term e search_year.
+            # Nota: ppb_link não deve ser UNIQUE globalmente se quisermos registrar
+            # o mesmo link para termos de busca diferentes.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pesquisas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT,
+                    author TEXT,
+                    ppb_link TEXT,
+                    ppr_link TEXT,
+                    univ_sigla TEXT,
+                    univ_nome TEXT,
+                    programa TEXT,
+                    search_term TEXT,
+                    search_year TEXT,
+                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ppb (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pesquisa_id INTEGER,
+                    url TEXT NOT NULL,
+                    html_content TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    message TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ppr (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pesquisa_id INTEGER,
+                    url TEXT NOT NULL,
+                    html_content TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sources (
+                    root_url TEXT PRIMARY KEY,
+                    status INTEGER DEFAULT 1
+                )
+            """)
+            conn.commit()
+            self._check_and_migrate()
+
+    def _check_and_migrate(self):
+        """Garante que as colunas de termo e ano existam nas tabelas."""
+        try:
+            with sqlite3.connect(self.db_name) as conn:
+                cursor = conn.cursor()
+                
+                # Migração Tabela PLB
+                cursor.execute("PRAGMA table_info(plb)")
+                columns_plb = [info[1] for info in cursor.fetchall()]
+                
+                if 'search_term' not in columns_plb:
+                    cursor.execute("ALTER TABLE plb ADD COLUMN search_term TEXT")
+                if 'search_year' not in columns_plb:
+                    cursor.execute("ALTER TABLE plb ADD COLUMN search_year TEXT")
+
+                # Migração Tabela Pesquisas (NOVO)
+                cursor.execute("PRAGMA table_info(pesquisas)")
+                columns_pesq = [info[1] for info in cursor.fetchall()]
+                
+                if 'search_term' not in columns_pesq:
+                    cursor.execute("ALTER TABLE pesquisas ADD COLUMN search_term TEXT")
+                if 'search_year' not in columns_pesq:
+                    cursor.execute("ALTER TABLE pesquisas ADD COLUMN search_year TEXT")
+                    
+                conn.commit()
+        except sqlite3.Error:
+            pass 
+
+    def save_pesquisas(self, data, term=None, year=None):
+        """
+        Salva as pesquisas no banco de dados.
+        A unicidade agora é definida pela combinação: Título + Autor + Termo + Ano.
+        """
+        with sqlite3.connect(self.db_name) as conn:
+            cursor = conn.cursor()
+            for item in data:
+                title = item.get('title')
+                author = item.get('author')
+                
+                # 1. Verifica se já existe um registro idêntico (mesmo título/autor E mesmo contexto de busca)
+                cursor.execute("""
+                    SELECT 1 FROM pesquisas 
+                    WHERE title = ? AND author = ? AND search_term = ? AND search_year = ?
+                """, (title, author, term, year))
+                
+                if cursor.fetchone():
+                    continue # Registro já existe para este termo/ano, pula.
+
+                # 2. Insere o novo registro
+                try:
+                    cursor.execute("""
+                        INSERT INTO pesquisas (
+                            title, author, ppb_link, ppr_link, 
+                            univ_sigla, univ_nome, programa,
+                            search_term, search_year
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        title, author, item.get('link_page'), 
+                        item.get('link_file'), item.get('sigla'), 
+                        item.get('universidade'), item.get('programa'),
+                        term, year
+                    ))
+                except sqlite3.IntegrityError:
+                    # Em bancos de dados criados anteriormente, ppb_link pode ter constraint UNIQUE.
+                    # Se cairmos aqui, ignoramos para não quebrar a execução, mas o ideal 
+                    # seria recriar o banco se desejar duplicar links para termos diferentes.
+                    pass
+            conn.commit()
+            

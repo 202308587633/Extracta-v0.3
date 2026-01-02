@@ -1,3 +1,5 @@
+
+
 import re
 import time
 import threading
@@ -11,19 +13,10 @@ import webbrowser
 from urllib.parse import urlparse, parse_qs, unquote, urlencode, urlunparse
 from bs4 import BeautifulSoup
 import math
+import customtkinter as ctk
+from tkinter import ttk
 
 class MainViewModel: # Certifique-se de que o nome da classe está correto
-    def scrape_specific_search_url(self, url):
-        self._log(f"Iniciando scrap de busca: {url}", "yellow")
-        thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'buscador'))
-        thread.start()
-
-    def scrape_repository_url(self, url):
-        """Inicia o scrap do link do repositório (PDF/Documento)"""
-        self._log(f"Iniciando scrap do repositório: {url}", "yellow")
-        thread = threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio'))
-        thread.start()
-
     def load_history_details(self, history_id):
         """Busca conteúdo da tabela 'plb' e exibe na interface."""
         self.current_history_id = history_id
@@ -31,25 +24,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
         _, html = self.db.get_plb_content(history_id) 
         
         self.view.after_thread_safe(lambda: self.view.history_tab.display_content(html))    
-
-    def on_tab_changed(self):
-        """Atualiza o conteúdo baseado no nome exato da aba selecionada"""
-        if not hasattr(self, 'selected_research'): return
-
-        current_tab = self.view.tabview.get()
-        title = self.selected_research["title"]
-        author = self.selected_research["author"]
-
-        # Sincronize estes nomes com os nomes usados no self.tabview.add() da MainView
-        if current_tab == "Conteúdo PPB":
-            html = self.db.get_extracted_html(title, author)
-            if html:
-                self.view.content_tab.display_html(html)
-        
-        elif current_tab == "Conteúdo PPR":
-            html = self.db.get_ppr_html(title, author)
-            if html:
-                self.view.repo_tab.display_html(html)
 
     def _open_html_string_in_browser(self, html_content):
         """Método utilitário para abrir strings HTML no navegador."""
@@ -65,34 +39,6 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self._log("PPR aberta no navegador com sucesso.", "green")
         except Exception as e:
             self._log(f"Erro ao abrir navegador: {e}", "red")
-
-    def open_ppr_in_browser(self):
-        """Recupera a PPR do banco e exibe no navegador."""
-        if not hasattr(self, 'selected_research'):
-            self._log("Selecione uma pesquisa nos resultados.", "yellow")
-            return
-        
-        title = self.selected_research["title"]
-        author = self.selected_research["author"]
-        
-        # Recupera o HTML da tabela ppr
-        html = self.db.get_ppr_html(title, author)
-        self._open_html_string_in_browser(html)
-
-    def handle_result_selection(self, title, author):
-        """Atualiza o estado das abas e injeta o conteúdo conforme a seleção na tabela."""
-        self.selected_research = {"title": title, "author": author}
-        
-        # Busca a existência de conteúdo nas tabelas PPB e PPR
-        html_ppb = self.db.get_extracted_html(title, author)
-        html_ppr = self.db.get_ppr_html(title, author)
-
-        # Habilita ou desabilita as abas conforme a existência de dados no banco
-        self.view.set_tab_state("Conteúdo PPB", "normal" if html_ppb else "disabled")
-        self.view.set_tab_state("Conteúdo PPR", "normal" if html_ppr else "disabled")
-        
-        # Força a atualização imediata caso o usuário já esteja na aba
-        self.on_tab_changed()
 
     def _extract_meta_content(self, soup, meta_names):
         """Busca conteúdo em tags <meta name='...'>"""
@@ -199,536 +145,354 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             "FUNDAÇÃO GETULIO VARGAS": "FGV"
         }
 
-    def extract_univ_data(self):
-        """Extrai Sigla, Univ e Programa delegando para a ParserFactory."""
-        if not hasattr(self, 'selected_research'): 
-            self._log("Selecione uma pesquisa na tabela primeiro.", "yellow")
-            return
-        
-        title = self.selected_research["title"]
-        author = self.selected_research["author"]
-        
-        # Busca o HTML salvo no banco
-        url, html = self.db.get_ppr_full_content(title, author)
-        
-        if html and url:
-            try:
-                # Importa a Factory
-                from services.parser_factory import ParserFactory
-                
-                factory = ParserFactory()
-                
-                # A Factory analisa o HTML e devolve DSpaceParser ou VufindParser
-                parser = factory.get_parser(url, html_content=html)
-                
-                self._log(f"Parser identificado: {parser.__class__.__name__}", "yellow")
-
-                # O Parser faz todo o trabalho sujo
-                data = parser.extract(html, url)
-                
-                # Recupera os dados retornados (com valores padrão se vazio)
-                sigla = data.get('sigla', '-')
-                univ = data.get('universidade', 'Não identificada')
-                programa = data.get('programa', 'Não identificado')
-
-                # Atualiza no banco
-                self.db.update_univ_data(title, author, sigla, univ, programa)
-                
-                self._log(f"Sucesso: {sigla} | {programa[:30]}...", "green")
-                
-                # Atualiza a UI
-                self.initialize_data()
-                
-            except Exception as e:
-                self._log(f"Erro na extração: {e}", "red")
-                print(f"Erro detalhado: {e}") # Debug
-        else:
-            self._log("Erro: Conteúdo PPR não encontrado (execute o scrap primeiro).", "red")
-
     def _update_source_ui(self, url, success):
         """Atualiza a aba de Fontes na interface"""
         root = self._extract_root_url(url)
         self.view.update_source_status(root, success)
 
-    def _extract_root_url(self, url):
-        try:
-            parsed = urlparse(url)
-            # Retorna netloc (ex: repositorio.ucs.br) e remove porta se houver
-            return parsed.netloc.split(':')[0]
-        except:
-            return "url-invalida"
-
-    def _update_source_ui_and_db(self, url, success):
-        """Atualiza a UI e Persiste o status no Banco."""
-        root = self._extract_root_url(url)
-        
-        # 1. Salva no Banco
-        self.db.save_source_status(root, success)
-        
-        # 2. Atualiza a UI
-        self.view.update_source_status(root, success)
-
-    def scrape_pending_pprs(self):
-        """Inicia o processo de raspagem em lote."""
-        pending = self.db.get_pending_ppr_records()
-        if not pending:
-            self._log("Todas as PPRs listadas já possuem HTML salvo.", "green")
-            return
-
-        self._log(f"Iniciando download em lote de {len(pending)} PPRs pendentes...", "yellow")
-        thread = threading.Thread(target=self._run_batch_ppr_scraping, args=(pending,))
-        thread.start()
-
-    def _run_batch_ppr_scraping(self, pending_list):
-        """
-        Executa o download sequencial.
-        REGRA: Só baixa se a raiz não estiver marcada como Falha (unchecked) na guia Fontes.
-        """
-        total = len(pending_list)
-        success_count = 0
-        skipped_count = 0
-        
-        for index, (pid, url) in enumerate(pending_list):
-            root = self._extract_root_url(url)
-            
-            # --- VERIFICAÇÃO DE PERMISSÃO ---
-            # Verifica no banco se essa raiz está permitida (True) ou bloqueada (False)
-            is_allowed = self.db.get_source_status(root)
-            
-            if not is_allowed:
-                self._log(f"Pulando {root} (Marcada como inativa/falha na guia Fontes).", "yellow")
-                skipped_count += 1
-                continue
-            # -------------------------------
-
-            try:
-                self._log(f"Baixando ({index + 1}/{total}): {url}", "yellow")
-                html = self.scraper.fetch_html(url)
-                
-                if html:
-                    self.db.save_ppr_content(url, html)
-                    success_count += 1
-                    # Sucesso: Garante que está marcado como True
-                    self._update_source_ui_and_db(url, True)
-                else:
-                    raise Exception("HTML vazio retornado")
-                
-                time.sleep(1.0) # Crawling educado
-                
-            except Exception as e:
-                # FALHA NO DOWNLOAD
-                self._log(f"Falha ao baixar {url}: {e}", "red")
-                
-                # REQUISITO: Desmarcar a caixa na guia Fontes
-                # Isso bloqueará futuras tentativas para este domínio nesta execução e nas próximas
-                self._update_source_ui_and_db(url, False) 
-                
-                # "Reiniciar o processo" = O loop continua, mas agora o get_source_status(root)
-                # retornará False para as próximas URLs desse mesmo domínio, efetivamente pulando-as.
-
-        self._log(f"Lote concluído! {success_count} baixados, {skipped_count} pulados.", "green")
-        
-        # Recarrega a tabela de resultados para mostrar se houve novos dados (opcional)
-        self.initialize_data()
-    
-    def _log(self, message, color="white"):
-        try:
-            self.db.save_log(message)
-        except:
-            pass
-        self.view.update_status(message, color)
-    
-    def _run_specific_scraping_task(self, url, doc_type='buscador'):
-        try:
-            html = self.scraper.fetch_html(url)
-            if doc_type == 'buscador':
-                self.db.save_ppb_content(url, html)
-            else:
-                self.db.save_ppr_content(url, html)
-            
-            self._update_source_ui_and_db(url, True)
-            self.view.after_thread_safe(self.load_history_list)
-            self._log(f"{doc_type.upper()} capturado.", "green")
-        except Exception as e:
-            self._update_source_ui_and_db(url, False)
-            self._log(f"Erro em {doc_type}: {e}", "red")
-
     def toggle_source_manually(self, root_url, new_status):
         self.db.save_source_status(root_url, new_status)
         self._log(f"Fonte {root_url} alterada manualmente para {new_status}", "white")
 
-    def batch_extract_univ_data(self):
-        """
-        Dispara a extração de metadados (Sigla/Univ/Programa) para 
-        TODAS as PPRs que já têm HTML salvo no banco.
-        """
-        records = self.db.get_all_ppr_with_html()
-        
-        if not records:
-            self._log("Nenhum HTML de PPR encontrado no banco para processar.", "yellow")
-            return
-            
-        self._log(f"Iniciando extração de dados em lote para {len(records)} registros...", "yellow")
-        
-        # Executa em thread para não travar a interface
-        threading.Thread(target=self._run_batch_extraction, args=(records,)).start()
+    def _setup_ui(self):
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(2, weight=1) # Tabela na linha 2 expande
 
-    def _run_batch_extraction(self, records):
-        # Importação tardia para evitar ciclos, se necessário
-        from services.parser_factory import ParserFactory
-        factory = ParserFactory()
+        # --- 1. Barra de Ferramentas ---
+        self.toolbar = ctk.CTkFrame(self, fg_color="transparent")
+        self.toolbar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
+
+        # Botões de Ação
+        self.btn_scrape_pending = ctk.CTkButton(
+            self.toolbar, text="⬇️ Baixar HTMLs Pendentes", 
+            command=self.viewmodel.scrape_pending_pprs, height=30,
+            fg_color="#1f538d", hover_color="#14375e", font=("Roboto", 12, "bold")
+        )
+        self.btn_scrape_pending.pack(side="left", padx=(0, 10))
+
+        self.btn_extract_batch = ctk.CTkButton(
+            self.toolbar, text="🏷️ Extrair Dados Univ. (Lote)", 
+            command=self.viewmodel.batch_extract_univ_data, height=30,
+            fg_color="#27ae60", hover_color="#219150", font=("Roboto", 12, "bold")
+        )
+        self.btn_extract_batch.pack(side="left", padx=(0, 10))
+
+        self.btn_refresh = ctk.CTkButton(
+            self.toolbar, text="🔄 Atualizar", 
+            command=lambda: self.viewmodel.initialize_data(), height=30,
+            fg_color="gray", hover_color="#555555", width=80
+        )
+        self.btn_refresh.pack(side="left")
+
+        # --- 2. Barra de Filtros (NOVO) ---
+        self.filter_frame = ctk.CTkFrame(self)
+        self.filter_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         
+        # Filtro Título
+        ctk.CTkLabel(self.filter_frame, text="Título:", font=("Roboto", 11)).pack(side="left", padx=(10, 2))
+        self.ent_filter_title = ctk.CTkEntry(self.filter_frame, width=200, placeholder_text="Filtrar...")
+        self.ent_filter_title.pack(side="left", padx=5)
+        self.ent_filter_title.bind("<KeyRelease>", self._apply_filters)
+
+        # Filtro Autor
+        ctk.CTkLabel(self.filter_frame, text="Autor:", font=("Roboto", 11)).pack(side="left", padx=(10, 2))
+        self.ent_filter_author = ctk.CTkEntry(self.filter_frame, width=150, placeholder_text="Filtrar...")
+        self.ent_filter_author.pack(side="left", padx=5)
+        self.ent_filter_author.bind("<KeyRelease>", self._apply_filters)
+
+        # Filtro Universidade
+        ctk.CTkLabel(self.filter_frame, text="Univ.:", font=("Roboto", 11)).pack(side="left", padx=(10, 2))
+        self.ent_filter_univ = ctk.CTkEntry(self.filter_frame, width=100, placeholder_text="Sigla...")
+        self.ent_filter_univ.pack(side="left", padx=5)
+        self.ent_filter_univ.bind("<KeyRelease>", self._apply_filters)
+
+        # Label de Contagem
+        self.label_count = ctk.CTkLabel(self.filter_frame, text="Total: 0", font=("Roboto", 11, "bold"))
+        self.label_count.pack(side="right", padx=15)
+
+        # --- 3. Tabela ---
+        self.container = ctk.CTkFrame(self, fg_color="transparent")
+        self.container.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.container.grid_columnconfigure(0, weight=1)
+        self.container.grid_rowconfigure(0, weight=1)
+
+        style = ttk.Style()
+        style.theme_use("default")
+        bg_color = "#2b2b2b"
+        text_color = "#ffffff"
+        selected_bg = "#1f538d"
+        header_bg = "#1f1f1f"
+        
+        style.configure("Treeview", background=bg_color, foreground=text_color, 
+                        fieldbackground=bg_color, rowheight=30, borderwidth=0, font=("Roboto", 11))
+        style.map('Treeview', background=[('selected', selected_bg)])
+        style.configure("Treeview.Heading", background=header_bg, foreground=text_color, 
+                        relief="flat", padding=(5, 5), font=("Roboto", 12, "bold"))
+        style.map("Treeview.Heading", background=[('active', '#343638')])
+
+        columns = ("title", "author", "sigla", "universidade", "programa")
+        self.tree = ttk.Treeview(self.container, columns=columns, show="headings", selectmode="browse")
+
+        # Cabeçalhos com Ordenação
+        self.tree.heading("title", text="Nome da Pesquisa", command=lambda: self._sort_column("title", False))
+        self.tree.heading("author", text="Autor", command=lambda: self._sort_column("author", False))
+        self.tree.heading("sigla", text="Sigla", command=lambda: self._sort_column("sigla", False))
+        self.tree.heading("universidade", text="Universidade", command=lambda: self._sort_column("universidade", False))
+        self.tree.heading("programa", text="Programa", command=lambda: self._sort_column("programa", False))
+
+        self.tree.column("title", width=300, minwidth=150, anchor="w")
+        self.tree.column("author", width=150, minwidth=100, anchor="w")
+        self.tree.column("sigla", width=60, anchor="center")
+        self.tree.column("universidade", width=200, anchor="w")
+        self.tree.column("programa", width=200, anchor="w")
+
+        self.scrollbar = ctk.CTkScrollbar(self.container, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=self.scrollbar.set)
+
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        self.scrollbar.grid(row=0, column=1, sticky="ns")
+
+        self.tree.bind("<Double-1>", self._on_double_click)
+        self.tree.bind("<Button-3>", self._show_context_menu)
+        self.tree.bind("<<TreeviewSelect>>", self._on_row_select)
+
+    def display_results(self, results):
+        """Salva os dados brutos e aplica os filtros para exibição."""
+        self.all_data = results
+        self._apply_filters()
+
+    def _apply_filters(self, event=None):
+        """Filtra os dados em memória e atualiza a Treeview."""
+        f_title = self.ent_filter_title.get().lower().strip()
+        f_author = self.ent_filter_author.get().lower().strip()
+        f_univ = self.ent_filter_univ.get().lower().strip()
+
+        # Limpa tabela atual
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        self.link_map.clear()
+        self.item_map.clear()
+
         count = 0
-        total = len(records)
-        
-        for index, (title, author, url, html) in enumerate(records):
-            try:
-                # 1. Identifica o parser correto para este HTML/URL
-                parser = factory.get_parser(url, html_content=html)
-                
-                # 2. Extrai os dados
-                data = parser.extract(html, url)
-                
-                sigla = data.get('sigla', '-')
-                univ = data.get('universidade', 'Não identificada')
-                programa = data.get('programa', 'Não identificado')
-                
-                # 3. Salva no banco
-                self.db.update_univ_data(title, author, sigla, univ, programa)
-                count += 1
-                
-                # Log de progresso a cada 5 itens para não poluir demais
-                if index % 5 == 0:
-                    self._log(f"Processando {index+1}/{total}: {sigla} - {programa[:20]}...", "white")
-                    
-            except Exception as e:
-                # Não interrompe o lote por erro em um item, apenas loga
-                print(f"Erro ao extrair {url}: {e}")
+        for idx, item in enumerate(self.all_data):
+            # Obtém valores seguros para comparação
+            title = str(item.get('title', '') or '').lower()
+            author = str(item.get('author', '') or '').lower()
+            univ_sigla = str(item.get('univ_sigla', '') or '').lower()
+            univ_nome = str(item.get('univ_nome', '') or '').lower()
 
-        self._log(f"Processamento concluído! Dados atualizados em {count}/{total} pesquisas.", "green")
+            # Verifica correspondência (AND)
+            match_title = f_title in title
+            match_author = f_author in author
+            match_univ = (f_univ in univ_sigla) or (f_univ in univ_nome)
+
+            if match_title and match_author and match_univ:
+                values = (
+                    item.get('title'), 
+                    item.get('author'), 
+                    item.get('univ_sigla', '-'), 
+                    item.get('univ_nome', 'Pendente...'),
+                    item.get('programa', '-') 
+                )
+                tree_id = self.tree.insert("", "end", values=values)
+                
+                # Mapeia IDs para funcionalidades originais
+                self.link_map[tree_id] = {'search': item.get('ppb_link'), 'repo': item.get('ppr_link')}
+                self.item_map[tree_id] = idx 
+                count += 1
+
+        self.label_count.configure(text=f"Total: {count}")
+
+    def _sort_column(self, col, reverse):
+        """Ordena a visualização atual da tabela."""
+        l = [(self.tree.set(k, col), k) for k in self.tree.get_children('')]
+        try:
+            l.sort(key=lambda t: t[0].lower(), reverse=reverse)
+        except:
+            l.sort(reverse=reverse)
+
+        for index, (val, k) in enumerate(l):
+            self.tree.move(k, '', index)
+
+        self.tree.heading(col, command=lambda: self._sort_column(col, not reverse))
+
+    def _get_selected_data(self):
+        """Helper para recuperar o dicionário de dados da linha selecionada."""
+        sel = self.tree.selection()
+        if not sel: return None
+        idx = self.item_map.get(sel[0])
+        if idx is not None and 0 <= idx < len(self.all_data):
+            return self.all_data[idx]
+        return None
+
+    def _scrape_repo_row(self):
+        """Dispara o callback para o link do repositório (usando link_map)."""
+        selected = self.tree.selection()
+        if not selected: return
+        item_id = selected[0]
+        links = self.link_map.get(item_id)
+        if links and links.get('repo'):
+            self.on_repo_scrape_callback(links['repo'])
+
+    def _view_ppb_browser(self):
+        """Abre o HTML da PPB no navegador."""
+        item = self._get_selected_data()
+        if item:
+            html = self.viewmodel.db.get_extracted_html(item.get('title'), item.get('author'))
+            self.viewmodel.view.open_html_from_db_in_browser(html)
+
+    def _view_ppb_internal(self):
+        """Muda para a aba interna de PPB."""
+        item = self._get_selected_data()
+        if item:
+            self.viewmodel.handle_result_selection(item.get('title'), item.get('author'))
+            self.viewmodel.view.switch_to_content_tab()
+
+    def _view_ppr_internal(self):
+        """Muda para a aba interna de PPR."""
+        item = self._get_selected_data()
+        if item:
+            self.viewmodel.handle_result_selection(item.get('title'), item.get('author'))
+            try: self.viewmodel.view.tabview.set("Conteúdo PPR")
+            except ValueError: pass
+
+    def _view_ppr_browser(self):
+        """Abre o HTML da PPR no navegador."""
+        item = self._get_selected_data()
+        if item:
+            self.viewmodel.handle_result_selection(item.get('title'), item.get('author'))
+            self.viewmodel.open_ppr_in_browser()
+
+    def _on_row_select(self, event):
+        """Atualiza a seleção no ViewModel ao clicar na linha."""
+        item = self._get_selected_data()
+        if item:
+            self.viewmodel.handle_result_selection(item.get('title'), item.get('author'))
+
+    def __init__(self, view):
+        self.view = view
+        self.db = DatabaseModel(db_name=config.DB_NAME)
+        self.scraper = ScraperModel()
+        self.current_history_id = None
+        self.selected_research = None
         
-        # Atualiza a tabela na interface
-        self.initialize_data()
+        # Flag de controle para interrupção (Botão Parar)
+        self._stop_execution = False
+
+    def initialize_data(self):
+        """
+        Carrega dados iniciais:
+        1. Histórico na tabela.
+        2. Status das fontes (checkboxes).
+        3. Resultados já extraídos.
+        4. Filtros da Home (evitar pesquisas repetidas).
+        """
+        self.load_history_list()
+        
+        # 1. Status das Fontes
+        try:
+            if hasattr(self.db, 'get_all_sources'):
+                sources = self.db.get_all_sources()
+                for root, status in sources.items():
+                    self.view.update_source_status(root, status)
+        except Exception: pass
+
+        # 2. Resultados Salvos
+        try:
+            saved_data = self.db.get_all_pesquisas() 
+            if saved_data:
+                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
+        except Exception as e:
+            self._log(f"Erro ao carregar resultados: {e}", "red")
+
+        # 3. Filtros da Home (Exclusão de já pesquisados)
+        try:
+            if hasattr(self.db, 'get_existing_searches'):
+                existing_combinations = self.db.get_existing_searches()
+                self.view.after_thread_safe(lambda: self.view.filter_home_options(existing_combinations))
+        except Exception as e:
+            self._log(f"Erro ao carregar filtros de histórico: {e}", "yellow")
 
     def load_history_list(self):
         """
-        Carrega o histórico e prepara os dados estruturados para a Tabela (Treeview).
-        Prioriza 'search_term' e 'search_year' do banco. Se não existirem, faz parse da URL.
+        Prepara a lista de histórico para a Tabela (Treeview).
+        Extrai Termo, Ano e Página para as colunas.
         """
-        # O método get_plb_list agora deve retornar: (id, url, created_at, search_term, search_year)
         raw_items = self.db.get_plb_list() 
         structured_items = []
 
         for item in raw_items:
-            # Desempacotamento seguro (garanta que o DatabaseModel retornará 5 itens)
-            # Se o banco antigo retornar só 3, isso daria erro, mas assumimos que o banco foi migrado.
             try:
+                # (id, url, created_at, search_term, search_year)
                 item_id = item[0]
                 url = item[1]
                 created_at = item[2]
                 db_term = item[3] if len(item) > 3 else None
                 db_year = item[4] if len(item) > 4 else None
             except IndexError:
-                # Fallback para caso o DB não tenha retornado as colunas novas ainda
-                item_id, url, created_at = item[0], item[1], item[2]
-                db_term, db_year = None, None
+                continue
 
-            # Lógica Híbrida: Banco > URL
             if db_term and db_year:
                 termo = db_term
                 ano = db_year
-                # A página geralmente não é salva como metadado fixo, extraímos da URL
-                try:
-                    parsed = urlparse(url)
-                    pagina = parse_qs(parsed.query).get('page', ['1'])[0]
-                except:
-                    pagina = '1'
+                try: pagina = parse_qs(urlparse(url).query).get('page', ['1'])[0]
+                except: pagina = '1'
             else:
-                # Fallback: Extrair tudo da URL (para registros antigos)
+                # Fallback: Extrair da URL
                 try:
                     parsed = urlparse(url)
                     params = parse_qs(parsed.query)
-                    
                     termo_raw = params.get('lookfor0[]', params.get('lookfor', ['-']))[0]
                     termo = unquote(termo_raw).replace('"', '')
-                    
                     ano = params.get('publishDatefrom', ['-'])[0]
                     pagina = params.get('page', ['1'])[0]
-                except Exception:
-                    termo = "URL Personalizada"
-                    ano = "-"
-                    pagina = "1"
+                except:
+                    termo, ano, pagina = "URL Personalizada", "-", "1"
 
-            # Formata a data
-            data_fmt = created_at
-            
-            # Adiciona à lista estruturada para a View
-            structured_items.append((item_id, termo, ano, pagina, data_fmt, url))
+            structured_items.append((item_id, termo, ano, pagina, created_at, url))
 
-        # Envia para a View
         self.view.after_thread_safe(lambda: self.view.history_tab.update_table(structured_items))
 
-    def start_scraping_command(self):
-        url = self.view.get_url_input()
-        if not url: return
-        
-        # NOVO: Obtém o termo e ano selecionados na interface
-        # (O método get_current_selection deve ter sido criado na MainView)
-        term, year = None, None
-        if hasattr(self.view, 'get_current_selection'):
-            term, year = self.view.get_current_selection()
-        
-        self.view.toggle_button(False)
-        
-        # Passa term e year para a thread
-        thread = threading.Thread(target=self._run_task, args=(url, term, year))
-        thread.start()
-
-    def delete_history_item(self, history_id):
-        """Remove um item do histórico pelo ID."""
-        try:
-            if hasattr(self.db, 'delete_plb'):
-                self.db.delete_plb(history_id)
-            else:
-                self.db.delete_history(history_id)
-            
-            self.load_history_list()
-            self._log(f"Registro {history_id} excluído.", "white")
-        except Exception as e:
-            self._log(f"Erro ao excluir: {e}", "red")
-
-    def open_plb_in_browser(self, history_id):
-        """Abre o HTML salvo no navegador."""
-        try:
-            record = self.db.get_plb_by_id(history_id)
-            # record = (id, url, html, term, year) -> HTML é índice 2
-            if record and len(record) > 2 and record[2]:
-                self.view.open_html_from_db_in_browser(record[2])
-            else:
-                self._log("HTML não encontrado para este registro.", "yellow")
-        except Exception as e:
-            self._log(f"Erro ao abrir HTML: {e}", "red")
-
-    def extract_data_command(self, history_id):
-        """Extrai dados da PLB selecionada."""
-        try:
-            record = self.db.get_plb_by_id(history_id)
-            if not record: return
-
-            url = record[1]
-            html = record[2]
-            
-            if not html:
-                self._log("Aviso: Conteúdo HTML vazio.", "yellow")
-                return
-
-            self._log(f"Minerando dados em: {url}", "yellow")
-            
-            from models.parsers.vufind_parser import VufindParser
-
-            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
-            
-            if data:
-                self.db.save_pesquisas(data) 
-                self._log(f"Sucesso: {len(data)} pesquisas salvas.", "green")
-                
-                all_results = self.db.get_all_pesquisas()
-                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(all_results))
-                self.view.switch_to_results_tab()
-            else:
-                self._log("Nenhum dado encontrado.", "red")
-        except Exception as e:
-            self._log(f"Erro na extração: {e}", "red")
-
-    def open_ppb_browser_from_db(self, title=None, author=None):
-        """
-        Abre a PPB (Página de Pesquisa) no navegador.
-        Se title/author não forem passados, usa a seleção atual (self.selected_research).
-        """
-        if not title or not author:
-            if hasattr(self, 'selected_research') and self.selected_research:
-                title = self.selected_research.get("title")
-                author = self.selected_research.get("author")
-            else:
-                self._log("Nenhuma pesquisa selecionada para visualizar.", "yellow")
-                return
-
-        html = self.db.get_extracted_html(title, author)
-        if html:
-            self._open_html_string_in_browser(html)
-        else:
-            self._log("HTML da PPB não encontrado no banco.", "red")
-
-    def _extract_max_page(self, html_content):
-        """
-        Lê o número total de páginas do HTML.
-        Estratégia 1: Procura texto 'Resultados de X'.
-        Estratégia 2: Varre a paginação em busca do maior número (lida com [24]).
-        """
-        try:
-            soup = BeautifulSoup(html_content, 'html.parser')
-            
-            # --- ESTRATÉGIA 1: Cálculo baseado no total de resultados (Mais preciso) ---
-            # Busca strings como "Mostrando 1 - 20 resultados de 472"
-            # O BDTD usa 20 resultados por página.
-            stats_node = soup.find(string=re.compile(r"resultados de", re.IGNORECASE))
-            if stats_node:
-                # Pega o texto completo do pai para garantir contexto
-                full_text = stats_node.find_parent().get_text(strip=True)
-                # Extrai o número total (ex: 472)
-                match = re.search(r"resultados de\s*([\d\.]+)", full_text, re.IGNORECASE)
-                if match:
-                    total_str = match.group(1).replace('.', '')
-                    if total_str.isdigit():
-                        return math.ceil(int(total_str) / 20)
-
-            # --- ESTRATÉGIA 2: Links de Paginação (Fallback) ---
-            # Encontra todos os links dentro da lista de paginação
-            # O seletor .pagination a pega todos os links numéricos e o "Ir para a última página"
-            page_links = soup.select('.pagination a')
-            max_p = 1
-            
-            for link in page_links:
-                txt = link.get_text(strip=True)
-                
-                # Extrai apenas os dígitos do texto (remove colchetes [] e espaços)
-                # Ex: "[24]" -> "24", "10" -> "10"
-                numbers = re.findall(r'\d+', txt)
-                
-                if numbers:
-                    # Pega o último número encontrado no texto (caso haja mais de um, o que é raro aqui)
-                    val = int(numbers[-1])
-                    if val > max_p:
-                        max_p = val
-            
-            return max_p
-
-        except Exception as e:
-            self._log(f"Erro ao extrair paginação: {e}", "red")
-            return 1
-        
-    def __init__(self, view):
-        self.view = view
-        self.db = DatabaseModel(db_name=config.DB_NAME)
-        self.scraper = ScraperModel()
-        self.current_history_id = None
-        # Flag de controle para interrupção
-        self._stop_execution = False
-
     def stop_scraping_process(self):
-        """Sinaliza para interromper o loop de raspagem."""
         self._stop_execution = True
         self._log("🛑 Parando... Aguarde o fim da requisição atual.", "red")
 
     def _reset_stop_flag(self):
         self._stop_execution = False
 
-    def _run_pagination_task_sync(self, base_url, max_page, term, year):
-        """
-        Baixa sequencialmente as páginas.
-        - Verifica se a página já existe no banco (Resume).
-        - Verifica se o usuário pediu para parar.
-        """
-        separator = "&" if "?" in base_url else "?"
+    def start_scraping_command(self):
+        url = self.view.get_url_input()
+        if not url: return
         
-        count_new = 0
-        count_skipped = 0
+        term, year = None, None
+        if hasattr(self.view, 'get_current_selection'):
+            term, year = self.view.get_current_selection()
+        
+        self.view.toggle_button(False)
+        threading.Thread(target=self._run_task, args=(url, term, year)).start()
 
-        for i in range(2, max_page + 1):
-            # 1. Verifica solicitação de parada
-            if self._stop_execution:
-                self._log(f"🛑 Processo interrompido na página {i-1}.", "red")
-                break
-
-            # 2. Constrói a URL da página alvo
-            if "page=" in base_url:
-                current_url = re.sub(r'page=\d+', f'page={i}', base_url)
-            else:
-                current_url = f"{base_url}{separator}page={i}"
+    def _run_task(self, url, term=None, year=None):
+        try:
+            html = self.scraper.fetch_html(url)
+            self.db.save_plb(url, html, term, year)
             
-            # 3. VERIFICAÇÃO DE EXISTÊNCIA (Resume)
-            # Se a URL já estiver no banco, pula para a próxima
-            if hasattr(self.db, 'check_url_exists') and self.db.check_url_exists(current_url):
-                # Loga apenas a cada 10 para não poluir, ou se for o primeiro pulo
-                if count_skipped == 0 or i % 10 == 0:
-                    self._log(f"  -> Pág {i} já salva no banco. Pulando...", "white")
-                count_skipped += 1
-                continue
-
-            # 4. Baixa se não existir
-            self._log(f"  -> Baixando pág {i}/{max_page}...", "yellow")
+            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
+            self.view.after_thread_safe(self.load_history_list)
             
-            try:
-                html = self.scraper.fetch_html(current_url)
-                if html:
-                    self.db.save_plb(current_url, html, term, year)
-                    if hasattr(self, '_update_source_ui_and_db'):
-                        self._update_source_ui_and_db(current_url, True)
-                    count_new += 1
-                
-                # Pausa para não bloquear o IP
-                time.sleep(1.5)
-
-            except Exception as e:
-                self._log(f"Falha na pág {i}: {e}", "red")
-                if hasattr(self, '_update_source_ui_and_db'):
-                    self._update_source_ui_and_db(current_url, False)
-        
-        # Log final do item
-        if count_new > 0 or count_skipped > 0:
-            msg = f"Item finalizado. Novos: {count_new} | Já existiam: {count_skipped}"
-            self._log(msg, "green")
-        
-        self.view.after_thread_safe(self.load_history_list)
-
-    def _run_pagination_task(self, base_url, max_page, term=None, year=None):
-        self._reset_stop_flag()
-        self._run_pagination_task_sync(base_url, max_page, term, year)
-        
-        # Restaura botões
-        self.view.toggle_button(True)
-        if hasattr(self.view, 'toggle_stop_button'):
-            self.view.toggle_stop_button(False)
+            # Atualiza filtros para remover a pesquisa feita
+            self.initialize_data()
             
-        self._log("DeepScrap individual concluído.", "green")
-
-    def _run_batch_deep_scraping(self, history_ids):
-        self._reset_stop_flag()
-        total = len(history_ids)
-        
-        for index, h_id in enumerate(history_ids):
-            # Verifica parada entre os itens do lote
-            if self._stop_execution:
-                break
-
-            try:
-                record = self.db.get_plb_by_id(h_id)
-                if not record: continue
-                
-                url = record[1]
-                html = record[2]
-                term = record[3]
-                year = record[4]
-                
-                max_page = self._extract_max_page(html)
-                
-                if max_page > 1:
-                    self._log(f"[{index+1}/{total}] Processando '{term}': Total {max_page} págs.", "white")
-                    self._run_pagination_task_sync(url, max_page, term, year)
-                else:
-                    self._log(f"[{index+1}/{total}] '{term}' só tem 1 página. Verificado.", "white")
-            except Exception as e:
-                self._log(f"Erro no item {index+1}: {e}", "red")
-        
-        # Restaura botões
-        self.view.toggle_button(True)
-        if hasattr(self.view, 'toggle_stop_button'):
-            self.view.toggle_stop_button(False)
-
-        if self._stop_execution:
-            self._log("Processo interrompido pelo usuário.", "red")
-        else:
-            self._log("Processo em massa finalizado.", "green")
+            if hasattr(self, '_update_source_ui_and_db'):
+                self._update_source_ui_and_db(url, True)
+            
+            self._log("PLB capturada e salva com sucesso.", "green")
+        except Exception as e:
+            if hasattr(self, '_update_source_ui_and_db'):
+                self._update_source_ui_and_db(url, False)
+            self._log(f"Erro: {str(e)}", "red")
+        finally:
+            self.view.toggle_button(True)
 
     def check_pagination_and_scrape(self, history_id):
         try:
@@ -743,102 +507,314 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             max_page = self._extract_max_page(html)
             
             if max_page > 1:
-                self._log(f"Iniciando DeepScrap individual (Total: {max_page} páginas)...", "yellow")
-                
-                # Bloqueia botão iniciar, libera botão parar
+                self._log(f"Iniciando DeepScrap Individual (Total: {max_page} págs)...", "yellow")
                 self.view.toggle_button(False)
-                if hasattr(self.view, 'toggle_stop_button'):
+                if hasattr(self.view, 'toggle_stop_button'): 
                     self.view.toggle_stop_button(True)
                 
                 threading.Thread(target=self._run_pagination_task, args=(url, max_page, term, year)).start()
             else:
                 self._log("Esta pesquisa parece ter apenas 1 página.", "yellow")
-
         except Exception as e:
             self._log(f"Erro ao iniciar paginação: {e}", "red")
 
     def scrape_all_page1_pagination(self):
         raw_items = self.db.get_plb_list()
         page1_ids = []
-
         for item in raw_items:
             try:
-                url = item[1]
-                parsed = urlparse(url)
-                params = parse_qs(parsed.query)
-                page = int(params.get('page', ['1'])[0])
-                if page == 1:
-                    page1_ids.append(item[0]) 
-            except:
-                continue
+                # Verifica se é página 1 pela URL
+                parsed = urlparse(item[1])
+                page = int(parse_qs(parsed.query).get('page', ['1'])[0])
+                if page == 1: page1_ids.append(item[0])
+            except: continue
 
         if not page1_ids:
-            self._log("Nenhuma 'Página 1' encontrada para processar.", "yellow")
+            self._log("Nenhuma 'Página 1' encontrada.", "yellow")
             return
 
-        self._log(f"Iniciando DeepScrap em massa para {len(page1_ids)} pesquisas...", "yellow")
-        
-        # Bloqueia botão iniciar, libera botão parar
+        self._log(f"DeepScrap em Massa: {len(page1_ids)} pesquisas.", "yellow")
         self.view.toggle_button(False)
-        if hasattr(self.view, 'toggle_stop_button'):
+        if hasattr(self.view, 'toggle_stop_button'): 
             self.view.toggle_stop_button(True)
             
         threading.Thread(target=self._run_batch_deep_scraping, args=(page1_ids,)).start()
 
-    def initialize_data(self):
-        """Carrega dados iniciais e aplica filtros de exclusão na Home Tab (remove pesquisas já feitas)."""
-        self.load_history_list()
+    def _run_pagination_task(self, base_url, max_page, term=None, year=None):
+        self._reset_stop_flag()
+        self._run_pagination_task_sync(base_url, max_page, term, year)
         
-        # 1. Carrega Status das Fontes
-        try:
-            if hasattr(self.db, 'get_all_sources'):
-                sources = self.db.get_all_sources()
-                for root, status in sources.items():
-                    self.view.update_source_status(root, status)
-        except Exception: 
-            pass
+        self.view.toggle_button(True)
+        if hasattr(self.view, 'toggle_stop_button'): self.view.toggle_stop_button(False)
+        self._log("DeepScrap individual concluído.", "green")
 
-        # 2. Carrega Resultados Salvos
+    def _run_batch_deep_scraping(self, history_ids):
+        self._reset_stop_flag()
+        total = len(history_ids)
+        
+        for index, h_id in enumerate(history_ids):
+            if self._stop_execution: break
+            try:
+                record = self.db.get_plb_by_id(h_id)
+                if not record: continue
+                url, html, term, year = record[1], record[2], record[3], record[4]
+                
+                max_page = self._extract_max_page(html)
+                if max_page > 1:
+                    self._log(f"[{index+1}/{total}] '{term}': {max_page} págs.", "white")
+                    self._run_pagination_task_sync(url, max_page, term, year)
+                else:
+                    self._log(f"[{index+1}/{total}] '{term}' só tem 1 pág.", "white")
+            except Exception as e:
+                self._log(f"Erro item {index+1}: {e}", "red")
+        
+        self.view.toggle_button(True)
+        if hasattr(self.view, 'toggle_stop_button'): self.view.toggle_stop_button(False)
+        self._log("Processo em massa finalizado.", "green" if not self._stop_execution else "red")
+
+    def _run_pagination_task_sync(self, base_url, max_page, term, year):
+        separator = "&" if "?" in base_url else "?"
+        count_new = 0
+        count_skipped = 0
+
+        for i in range(2, max_page + 1):
+            if self._stop_execution:
+                self._log(f"🛑 Interrompido na página {i-1}.", "red")
+                break
+
+            if "page=" in base_url:
+                current_url = re.sub(r'page=\d+', f'page={i}', base_url)
+            else:
+                current_url = f"{base_url}{separator}page={i}"
+            
+            # Resume: Pula se já existe
+            if hasattr(self.db, 'check_url_exists') and self.db.check_url_exists(current_url):
+                if count_skipped == 0 or i % 10 == 0:
+                    self._log(f"  -> Pág {i} já salva. Pulando...", "white")
+                count_skipped += 1
+                continue
+
+            self._log(f"  -> Baixando pág {i}/{max_page}...", "yellow")
+            try:
+                html = self.scraper.fetch_html(current_url)
+                if html:
+                    self.db.save_plb(current_url, html, term, year)
+                    if hasattr(self, '_update_source_ui_and_db'):
+                        self._update_source_ui_and_db(current_url, True)
+                    count_new += 1
+                time.sleep(1.5)
+            except Exception as e:
+                self._log(f"Falha pág {i}: {e}", "red")
+                if hasattr(self, '_update_source_ui_and_db'):
+                    self._update_source_ui_and_db(current_url, False)
+        
+        if count_new > 0 or count_skipped > 0:
+            self._log(f"Item: {count_new} novos, {count_skipped} pulados.", "green")
+        self.view.after_thread_safe(self.load_history_list)
+
+    def _extract_max_page(self, html_content):
         try:
-            saved_data = self.db.get_all_pesquisas() 
-            if saved_data:
-                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(saved_data))
+            soup = BeautifulSoup(html_content, 'html.parser')
+            stats_node = soup.find(string=re.compile(r"resultados de", re.IGNORECASE))
+            if stats_node:
+                full_text = stats_node.find_parent().get_text(strip=True)
+                match = re.search(r"resultados de\s*([\d\.]+)", full_text, re.IGNORECASE)
+                if match:
+                    total = int(match.group(1).replace('.', ''))
+                    return math.ceil(total / 20)
+            
+            page_links = soup.select('.pagination a')
+            max_p = 1
+            for link in page_links:
+                numbers = re.findall(r'\d+', link.get_text(strip=True))
+                if numbers:
+                    val = int(numbers[-1])
+                    if val > max_p: max_p = val
+            return max_p
+        except: return 1
+
+    def extract_data_command(self, history_id):
+        try:
+            record = self.db.get_plb_by_id(history_id)
+            if not record: return
+
+            url = record[1]
+            html = record[2]
+            term = record[3] if len(record) > 3 else "Desconhecido"
+            year = record[4] if len(record) > 4 else "-"
+            
+            if not html: return
+
+            self._log(f"Minerando: {url}", "yellow")
+            
+            from models.parsers.vufind_parser import VufindParser
+
+            data = self.scraper.extract_data(html, VufindParser(), base_url=url)
+            
+            if data:
+                # Salva com Termo e Ano para unicidade
+                if hasattr(self.db, 'save_pesquisas'):
+                    self.db.save_pesquisas(data, term, year)
+                
+                self._log(f"Sucesso: {len(data)} itens extraídos.", "green")
+                
+                all_results = self.db.get_all_pesquisas()
+                self.view.after_thread_safe(lambda: self.view.results_tab.display_results(all_results))
+                self.view.switch_to_results_tab()
+            else:
+                self._log("Nenhum dado encontrado.", "red")
         except Exception as e:
-            self._log(f"Erro ao carregar resultados: {e}", "red")
+            self._log(f"Erro na extração: {e}", "red")
 
-        # 3. Carrega histórico para FILTRAR (remover) opções já pesquisadas na Home
+    def delete_history_item(self, history_id):
         try:
-            # Verifica se o método existe no DB antes de chamar (segurança)
-            if hasattr(self.db, 'get_existing_searches'):
-                existing_combinations = self.db.get_existing_searches()
-                # Envia para a View processar a filtragem das comboboxes
-                self.view.after_thread_safe(lambda: self.view.filter_home_options(existing_combinations))
-        except Exception as e:
-            self._log(f"Erro ao carregar filtros de histórico: {e}", "yellow")
+            if hasattr(self.db, 'delete_plb'): self.db.delete_plb(history_id)
+            else: self.db.delete_history(history_id)
+            self.load_history_list()
+            self._log(f"Registro {history_id} excluído.", "white")
+        except Exception as e: self._log(f"Erro: {e}", "red")
 
-    def _run_task(self, url, term=None, year=None):
-        """Executa a tarefa de scraping de uma PLB."""
+    def open_plb_in_browser(self, history_id):
+        try:
+            record = self.db.get_plb_by_id(history_id)
+            if record and len(record) > 2 and record[2]:
+                self.view.open_html_from_db_in_browser(record[2])
+            else: self._log("HTML não encontrado.", "yellow")
+        except Exception as e: self._log(f"Erro: {e}", "red")
+
+    def scrape_specific_search_url(self, url):
+        self._log(f"Scrap Busca: {url}", "yellow")
+        threading.Thread(target=self._run_specific_scraping_task, args=(url, 'buscador')).start()
+
+    def scrape_repository_url(self, url):
+        self._log(f"Scrap Repositório: {url}", "yellow")
+        threading.Thread(target=self._run_specific_scraping_task, args=(url, 'repositorio')).start()
+
+    def _run_specific_scraping_task(self, url, doc_type):
         try:
             html = self.scraper.fetch_html(url)
-            
-            # Salva no banco
-            self.db.save_plb(url, html, term, year)
-            
-            # Atualiza a interface (HTML e Histórico)
-            self.view.after_thread_safe(lambda: self.view.home_tab.display_html(html))
-            self.view.after_thread_safe(self.load_history_list)
-            
-            # ATUALIZAÇÃO IMPORTANTE: Recarrega os dados para remover a pesquisa recém-concluída das opções
-            self.initialize_data()
-            
-            if hasattr(self, '_update_source_ui_and_db'):
+            if html:
+                if doc_type == 'buscador': self.db.save_ppb_content(url, html)
+                else: self.db.save_ppr_content(url, html)
+                
                 self._update_source_ui_and_db(url, True)
-            
-            self._log("PLB capturada e salva com sucesso.", "green")
+                self.view.after_thread_safe(self.load_history_list)
+                self._log(f"Conteúdo de {doc_type} salvo.", "green")
+            else:
+                raise Exception("HTML vazio")
         except Exception as e:
-            if hasattr(self, '_update_source_ui_and_db'):
-                self._update_source_ui_and_db(url, False)
-            self._log(str(e), "red")
-        finally:
-            self.view.toggle_button(True)
+            self._update_source_ui_and_db(url, False)
+            self._log(f"Erro em {url}: {e}", "red")
 
+    def scrape_pending_pprs(self):
+        pending = self.db.get_pending_ppr_records()
+        if not pending:
+            self._log("Nenhum HTML pendente.", "green")
+            return
+        self._log(f"Baixando {len(pending)} pendentes...", "yellow")
+        threading.Thread(target=self._run_batch_ppr_scraping, args=(pending,)).start()
+
+    def _run_batch_ppr_scraping(self, pending_list):
+        count = 0
+        for pid, url in pending_list:
+            root = self._extract_root_url(url)
+            if not self.db.get_source_status(root):
+                continue # Fonte bloqueada/falha
+            try:
+                html = self.scraper.fetch_html(url)
+                if html:
+                    self.db.save_ppr_content(url, html)
+                    self._update_source_ui_and_db(url, True)
+                    count += 1
+                time.sleep(1.0)
+            except:
+                self._update_source_ui_and_db(url, False)
+        self._log(f"Lote finalizado. {count} baixados.", "green")
+        self.initialize_data()
+
+    def batch_extract_univ_data(self):
+        records = self.db.get_all_ppr_with_html()
+        if not records:
+            self._log("Sem HTMLs de repositório para analisar.", "yellow")
+            return
+        self._log(f"Analisando {len(records)} repositórios...", "yellow")
+        threading.Thread(target=self._run_batch_extraction, args=(records,)).start()
+
+    def _run_batch_extraction(self, records):
+        try: from services.parser_factory import ParserFactory
+        except: return
+        factory = ParserFactory()
+        count = 0
+        for idx, (title, author, url, html) in enumerate(records):
+            try:
+                parser = factory.get_parser(url, html_content=html)
+                data = parser.extract(html, url)
+                self.db.update_univ_data(title, author, 
+                                         data.get('sigla'), 
+                                         data.get('universidade'), 
+                                         data.get('programa'))
+                count += 1
+                if idx % 10 == 0: self._log(f"Processando {idx}...", "white")
+            except: pass
+        self._log(f"Extração concluída. {count} atualizados.", "green")
+        self.initialize_data()
+
+    def extract_univ_data(self):
+        # Lógica individual (chamada pelo menu de contexto)
+        if not hasattr(self, 'selected_research'): return
+        title = self.selected_research["title"]
+        author = self.selected_research["author"]
+        res = self.db.get_ppr_full_content(title, author)
+        if res and res[0] and res[1]:
+            self._run_batch_extraction([(title, author, res[0], res[1])])
+        else:
+            self._log("HTML não encontrado. Faça o scrap primeiro.", "red")
+
+    def on_tab_changed(self):
+        if not hasattr(self, 'selected_research') or not self.selected_research: return
+        current = self.view.tabview.get()
+        t, a = self.selected_research["title"], self.selected_research["author"]
+        
+        if current == "Conteúdo PPB":
+            h = self.db.get_extracted_html(t, a)
+            if h: self.view.content_tab.display_html(h)
+        elif current == "Conteúdo PPR":
+            h = self.db.get_ppr_html(t, a)
+            if h: self.view.repo_tab.display_html(h)
+
+    def handle_result_selection(self, title, author):
+        self.selected_research = {"title": title, "author": author}
+        h1 = self.db.get_extracted_html(title, author)
+        h2 = self.db.get_ppr_html(title, author)
+        self.view.set_tab_state("Conteúdo PPB", "normal" if h1 else "disabled")
+        self.view.set_tab_state("Conteúdo PPR", "normal" if h2 else "disabled")
+        self.on_tab_changed()
+
+    def open_ppb_browser_from_db(self, title=None, author=None):
+        if not title:
+            if hasattr(self, 'selected_research') and self.selected_research:
+                title = self.selected_research["title"]
+                author = self.selected_research["author"]
+            else: return
+        h = self.db.get_extracted_html(title, author)
+        if h: self.view.open_html_from_db_in_browser(h)
+
+    def open_ppr_in_browser(self):
+        if hasattr(self, 'selected_research') and self.selected_research:
+            h = self.db.get_ppr_html(self.selected_research["title"], self.selected_research["author"])
+            if h: self.view.open_html_from_db_in_browser(h)
+            
+    def _log(self, message, color="white"):
+        try: self.db.save_log(message)
+        except: pass
+        self.view.update_status(message, color)
+
+    def _extract_root_url(self, url):
+        try: return urlparse(url).netloc.split(':')[0]
+        except: return ""
+
+    def _update_source_ui_and_db(self, url, success):
+        root = self._extract_root_url(url)
+        if root:
+            self.db.save_source_status(root, success)
+            self.view.update_source_status(root, success)
