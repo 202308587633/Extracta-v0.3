@@ -841,3 +841,4 @@ class MainViewModel: # Certifique-se de que o nome da classe está correto
             self._log(str(e), "red")
         finally:
             self.view.toggle_button(True)
+
