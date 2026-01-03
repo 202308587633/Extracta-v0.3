@@ -10,7 +10,8 @@ from parsers.usp_parser import USPParser
 from parsers.ucs_parser import UcsParser 
 from parsers.uepg_parser import UEPGParser
 from parsers.unicap_parser import UnicapParser
-from parsers.ufpa_parser import UFPAParser # <--- [1] IMPORTAÇÃO
+from parsers.ufpa_parser import UFPAParser
+from parsers.unisa_parser import UnisaParser # <--- [1] IMPORTAÇÃO
 try:
     from models.parsers.vufind_parser import VufindParser
 except ImportError:
@@ -32,8 +33,10 @@ class ParserFactory:
             'tede2.uepg.br': UEPGParser,
             '.unicap.br': UnicapParser,
             'tede2.unicap.br': UnicapParser,
-            '.ufpa.br': UFPAParser,        # <--- [2] REGISTRO
-            'repositorio.ufpa.br': UFPAParser # <--- [2] REGISTRO
+            '.ufpa.br': UFPAParser,
+            'repositorio.ufpa.br': UFPAParser,
+            'dspace.unisa.br': UnisaParser, # <--- [2] REGISTRO
+            '.unisa.br': UnisaParser        # <--- [2] REGISTRO
         }
 
     def _load_config(self, path):
