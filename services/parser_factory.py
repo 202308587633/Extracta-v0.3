@@ -17,8 +17,14 @@ except ImportError:
 # Adicione outros imports de classes CUSTOMIZADAS se necessário (ex: UfrgsParser se tiver lógica única)
 
 class ParserFactory:
-    def __init__(self, config_path="parsers_config.json"):
+    def __init__(self, config_filename="parsers_config.json"):
         self._default = GenericParser()
+        
+        # CORREÇÃO: Constrói o caminho absoluto baseado na localização deste arquivo
+        # Isso garante que ele encontre o JSON dentro da pasta 'services'
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        config_path = os.path.join(base_dir, config_filename)
+        
         self.config_map = self._load_config(config_path)
         
         # Mapa de Parsers com lógica CUSTOMIZADA (prioridade alta)
