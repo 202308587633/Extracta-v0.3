@@ -57,6 +57,12 @@
     "uol.unifor.br": "UniforParser",
 
     "repositorio.jesuita.org.br": "UnisinosParser", 
-    ".unisinos.br": "UnisinosParser"
+    ".unisinos.br": "UnisinosParser",
+
+    "bibliotecatede.uninove.br": "UninoveParser",
+    ".uninove.br": "UninoveParser",
+
+    "bdtd.ucb.br": "UcbParser",
+    ".ucb.br": "UcbParser"
   }
 }

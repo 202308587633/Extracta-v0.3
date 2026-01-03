@@ -30,6 +30,8 @@ from parsers.udesc_parser import UdescParser
 from parsers.siduece_parser import SidUeceParser
 from parsers.fecap_parser import FecapParser
 from parsers.utfpr_parser import UTFPRParser
+from parsers.uninove_parser import UninoveParser
+from parsers.ucb_parser import UcbParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
@@ -39,6 +41,8 @@ class ParserFactory:
         # Mapa de classes disponíveis (String -> Classe Real)
         # Isso permite instanciar a classe baseada no nome que está no JSON
         self.available_parsers = {
+            'UcbParser': UcbParser,
+            'UninoveParser': UninoveParser,
             'VufindParser': VufindParser,
             'BDTDParser': BDTDParser,
             'DSpaceJSPUIParser': DSpaceJSPUIParser,
