@@ -1,16 +1,31 @@
 from urllib.parse import urlparse
 
 class BaseViewModel:
-    def __init__(self, system_repo):
+    def __init__(self, system_repo, view=None):
         self.sys_repo = system_repo
+        self.view = view # Referência opcional à interface para atualizar status
 
     def _log(self, message, color="white"):
-        # Salva no banco e avisa a view
-        try: self.sys_repo.log(message)
-        except: pass
-        # Assume que a View tem um método central de status ou log
-        # Em uma arquitetura MVVM pura, usaríamos Observables/Events
-        pass 
+        """
+        Log Centralizado:
+        1. Salva no banco de dados (tabela logs).
+        2. Atualiza a barra de status na interface.
+        3. Adiciona na aba 'Logs' da interface.
+        """
+        # 1. Salva no Banco
+        try: 
+            if self.sys_repo:
+                self.sys_repo.log(message)
+        except Exception as e:
+            print(f"Erro ao salvar log no banco: {e}")
+
+        # 2. Atualiza Interface (Status Bar + Aba Log)
+        if self.view:
+            # Garante que roda na thread principal da UI
+            self.view.after_thread_safe(lambda: self.view.update_status(message, color))
+        else:
+            # Fallback para console se não tiver view (ex: testes)
+            print(f"[{color.upper()}] {message}")
 
     def _extract_root(self, url):
         try: return urlparse(url).netloc.split(':')[0]
@@ -18,8 +33,11 @@ class BaseViewModel:
 
     def _update_source_status(self, url, status):
         root = self._extract_root(url)
-        if root: self.sys_repo.update_source_status(root, status)
+        if root and self.sys_repo: 
+            self.sys_repo.update_source_status(root, status)
 
     def _check_source_allowed(self, url):
         root = self._extract_root(url)
-        return self.sys_repo.get_source_status(root)
+        if self.sys_repo:
+            return self.sys_repo.get_source_status(root)
+        return True

@@ -2,6 +2,7 @@ import customtkinter as ctk
 import config
 from urllib.parse import quote
 
+
 class HomeTab(ctk.CTkFrame):
     def get_url(self):
         return self.url_entry.get().strip()
@@ -150,23 +151,6 @@ class HomeTab(ctk.CTkFrame):
         # Atualiza a URL
         self._update_url_entry()
 
-    def _update_url_entry(self, _=None):
-        term = self.cmb_terms.get()
-        year = self.cmb_year.get()
-        
-        # Validações para não gerar URL inválida
-        if term == "Selecione um termo..." or not term: return
-        if year == "Concluído" or not year: return
-        
-        safe_term = quote(term)
-        url = (
-            f"https://bdtd.ibict.br/vufind/Search/Results"
-            f"?lookfor=%22{safe_term}%22&type=AllFields"
-            f"&daterange[]=publishDate&publishDatefrom={year}&publishDateto={year}"
-        )
-        self.url_entry.delete(0, "end")
-        self.url_entry.insert(0, url)
-
     def update_executed_searches(self, existing_list):
         """Recebe lista de (termo, ano) já pesquisados para filtrar as opções."""
         # existing_list vem do banco como [(termo, ano), ...]
@@ -204,22 +188,27 @@ class HomeTab(ctk.CTkFrame):
         self._update_url_entry()
 
     def _update_url_entry(self, _=None):
-        # Verifica se os widgets já foram criados para evitar erro na inicialização
         if not hasattr(self, 'cmb_terms') or not hasattr(self, 'cmb_year'):
             return
 
         term = self.cmb_terms.get()
         year = self.cmb_year.get()
         
-        # Validações para não gerar URL inválida
         if term == "Selecione um termo..." or not term: return
         if year == "Concluído" or not year: return
         
+        # --- MODIFICAÇÃO: Usa o Template do Config ---
         safe_term = quote(term)
-        url = (
-            f"https://bdtd.ibict.br/vufind/Search/Results"
-            f"?lookfor={safe_term}&type=AllFields&filter%5B%5D=publishDate%3A%22{year}%22"
-        )
-        
-        self.url_entry.delete(0, "end")
-        self.url_entry.insert(0, url)
+        try:
+            # Pega o template do config (ou usa um default se falhar)
+            template = getattr(config, 'SEARCH_URL_TEMPLATE', "https://bdtd.ibict.br/vufind/Search/Results?lookfor={term}")
+            
+            # Formata a string injetando os valores
+            url = template.format(term=safe_term, year=year)
+            
+            self.url_entry.delete(0, "end")
+            self.url_entry.insert(0, url)
+        except Exception as e:
+            self.url_entry.delete(0, "end")
+            self.url_entry.insert(0, f"Erro ao gerar URL: {e}")
+

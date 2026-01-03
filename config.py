@@ -14,6 +14,7 @@ DB_NAME = "database.db"
 
 # Scraping Defaults
 BASE_URL_BDTD = "https://bdtd.ibict.br/vufind/Search/Results"
+SEARCH_URL_TEMPLATE = "https://bdtd.ibict.br/vufind/Search/Results?lookfor={term}&type=AllFields&filter%5B%5D=publishDate%3A%22{year}%22"
 REQUEST_TIMEOUT = 30
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 DELAY_BETWEEN_REQUESTS = 1.5
