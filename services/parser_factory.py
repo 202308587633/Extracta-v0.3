@@ -22,6 +22,8 @@ from parsers.unisinos_parser import UnisinosParser
 from parsers.ufop_parser import UfopParser
 from parsers.uff_parser import UFFParser
 from parsers.fei_parser import FeiParser
+from parsers.ufrn_parser import UfrnParser
+from parsers.cefetmg_parser import CefetMgParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
@@ -33,6 +35,10 @@ class ParserFactory:
         self.config_map = self._load_config(config_path)
         
         self._custom_map = {
+            'repositorio.cefetmg.br': CefetMgParser,
+            '.cefetmg.br': CefetMgParser,
+            'repositorio.ufrn.br': UfrnParser,
+            '.ufrn.br': UfrnParser,
             'repositorio.fei.edu.br': FeiParser,
             '.fei.edu.br': FeiParser,
             'app.uff.br': UFFParser,
