@@ -63,6 +63,14 @@
     ".uninove.br": "UninoveParser",
 
     "bdtd.ucb.br": "UcbParser",
-    ".ucb.br": "UcbParser"
+    ".ucb.br": "UcbParser",
+
+    "repositorio.ufsm.br": "UfsmParser",
+    ".ufsm.br": "UfsmParser",
+
+    "dspace.sti.ufcg.edu.br": "UfcgParser",
+    ".ufcg.edu.br": "UfcgParser",
+
+    "repositorio.enap.gov.br": "EnapParser"
   }
 }
