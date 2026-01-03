@@ -9,7 +9,7 @@ from views.tabs.results_tab import ResultsTab
 from views.tabs.content_tab import ContentTab
 from views.tabs.repo_tab import RepoTab
 from views.tabs.sources_tab import SourcesTab
-from views.tabs.settings_tab import SettingsTab # NOVO
+from views.tabs.settings_tab import SettingsTab
 
 class MainView(ctk.CTk):
     def __init__(self):
@@ -37,7 +37,6 @@ class MainView(ctk.CTk):
         self.logo_label = ctk.CTkLabel(self.sidebar_frame, text=config.APP_TITLE, font=config.FONTS["logo"])
         self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
 
-        # Atalho para Configurações (opcional, já que agora tem aba)
         self.btn_settings = ctk.CTkButton(
             self.sidebar_frame, text="⚙️ Configurações",
             command=lambda: self.tabview.set("Configurações"),
@@ -58,9 +57,8 @@ class MainView(ctk.CTk):
         self.tabview.add("Conteúdo PPR")
         self.tabview.add("Fontes")
         self.tabview.add("Logs")
-        self.tabview.add("Configurações") # NOVO
+        self.tabview.add("Configurações")
 
-        # Abas
         self.home_tab = HomeTab(self.tabview.tab("Início"), command_callback=self.viewmodel.home_vm.start_scraping)
         self.home_tab.pack(fill="both", expand=True)
 
@@ -71,6 +69,7 @@ class MainView(ctk.CTk):
         )
         self.results_tab.pack(fill="both", expand=True)
 
+        # --- ATUALIZAÇÃO AQUI ---
         self.history_tab = HistoryTab(
             self.tabview.tab("Histórico"),
             on_select_callback=None,
@@ -79,7 +78,8 @@ class MainView(ctk.CTk):
             on_extract_callback=self.viewmodel.history_vm.extract_data,
             on_browser_callback=self.viewmodel.history_vm.open_browser,
             on_deep_scrape_callback=self.viewmodel.history_vm.scrape_all_page1,
-            on_stop_callback=self.viewmodel.history_vm.stop_process
+            on_stop_callback=self.viewmodel.history_vm.stop_process,
+            on_extract_all_callback=self.viewmodel.history_vm.extract_all_plbs # Novo Callback
         )
         self.history_tab.pack(fill="both", expand=True)
 
@@ -95,11 +95,9 @@ class MainView(ctk.CTk):
         self.log_tab = LogTab(self.tabview.tab("Logs"))
         self.log_tab.pack(fill="both", expand=True)
 
-        # NOVA ABA DE CONFIGURAÇÕES
         self.settings_tab = SettingsTab(self.tabview.tab("Configurações"), self.viewmodel.settings_vm)
         self.settings_tab.pack(fill="both", expand=True)
 
-        # Status Bar
         self.status_container = ctk.CTkFrame(self, height=30, corner_radius=0)
         self.status_container.grid(row=1, column=1, sticky="ew", padx=10, pady=10)
         self.label_status = ctk.CTkLabel(self.status_container, text="Pronto", font=("Roboto", 12))
