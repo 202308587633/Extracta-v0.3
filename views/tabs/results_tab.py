@@ -2,7 +2,8 @@ import customtkinter as ctk
 import webbrowser
 from tkinter import ttk
 import tkinter as tk
-import config # Import
+from tkinter import messagebox
+import config
 
 class ResultsTab(ctk.CTkFrame):
     def __init__(self, parent, viewmodel, on_scrape_callback, on_repo_scrape_callback):
@@ -11,9 +12,10 @@ class ResultsTab(ctk.CTkFrame):
         self.on_scrape_callback = on_scrape_callback
         self.on_repo_scrape_callback = on_repo_scrape_callback
         
-        self.all_data = []
-        self.item_map = {}
-        self.link_map = {}
+        # Estruturas para dados
+        self.all_data = [] 
+        self.item_map = {} 
+        self.link_map = {} 
 
         self._setup_ui()
         self._setup_context_menu()
@@ -22,10 +24,11 @@ class ResultsTab(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
 
-        # --- Toolbar ---
+        # --- 1. Barra de Ferramentas ---
         self.toolbar = ctk.CTkFrame(self, fg_color="transparent")
         self.toolbar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
 
+        # Botão Baixar Pendentes
         self.btn_scrape_pending = ctk.CTkButton(
             self.toolbar, text="⬇️ Baixar HTMLs Pendentes", 
             command=self.viewmodel.scrape_pending_pprs, height=30,
@@ -33,12 +36,24 @@ class ResultsTab(ctk.CTkFrame):
         )
         self.btn_scrape_pending.pack(side="left", padx=(0, 10))
 
+        # Botão Extrair em Lote
         self.btn_extract_batch = ctk.CTkButton(
             self.toolbar, text="🏷️ Extrair Dados Univ. (Lote)", 
             command=self.viewmodel.batch_extract_univ_data, height=30,
             fg_color="#27ae60", hover_color="#219150", font=config.FONTS["normal"]
         )
         self.btn_extract_batch.pack(side="left", padx=(0, 10))
+
+        # --- NOVO BOTÃO: Parar ---
+        self.btn_stop = ctk.CTkButton(
+            self.toolbar, text="⏹️ Parar",
+            # Chama diretamente o método do ResultsViewModel
+            command=lambda: self.viewmodel.results_vm.stop_process(), 
+            height=30, fg_color="#c0392b", hover_color="#e74c3c",
+            state="disabled", font=config.FONTS["normal"]
+        )
+        self.btn_stop.pack(side="left", padx=(0, 10))
+        # -------------------------
 
         self.btn_refresh = ctk.CTkButton(
             self.toolbar, text="🔄 Atualizar",
@@ -47,7 +62,7 @@ class ResultsTab(ctk.CTkFrame):
         )
         self.btn_refresh.pack(side="left")
 
-        # --- Filtros ---
+        # --- 2. Filtros ---
         self.filter_frame = ctk.CTkFrame(self)
         self.filter_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         
@@ -69,7 +84,7 @@ class ResultsTab(ctk.CTkFrame):
         self.label_count = ctk.CTkLabel(self.filter_frame, text="Total: 0", font=config.FONTS["small"])
         self.label_count.pack(side="right", padx=15)
 
-        # --- Tabela ---
+        # --- 3. Tabela (Treeview) ---
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
         self.container.grid_columnconfigure(0, weight=1)
@@ -78,7 +93,6 @@ class ResultsTab(ctk.CTkFrame):
         style = ttk.Style()
         style.theme_use("default")
         
-        # --- REFATORAÇÃO: Usando cores do config ---
         style.configure("Treeview", 
                         background=config.COLORS["table_bg"], 
                         foreground=config.COLORS["text"], 
@@ -120,6 +134,17 @@ class ResultsTab(ctk.CTkFrame):
     def display_results(self, results):
         self.all_data = results
         self._apply_filters()
+
+    # --- Controle de Estado dos Botões (Novo) ---
+    def set_stop_button_state(self, busy):
+        """Habilita o botão Parar se estiver ocupado, e desabilita os outros."""
+        state_stop = "normal" if busy else "disabled"
+        state_others = "disabled" if busy else "normal"
+        
+        self.btn_stop.configure(state=state_stop)
+        self.btn_scrape_pending.configure(state=state_others)
+        self.btn_extract_batch.configure(state=state_others)
+        self.btn_refresh.configure(state=state_others)
 
     def _apply_filters(self, event=None):
         f_title = self.ent_filter_title.get().lower().strip()
@@ -183,12 +208,51 @@ class ResultsTab(ctk.CTkFrame):
             links = self.link_map.get(sel[0])
             if links and links['repo']: self.on_repo_scrape_callback(links['repo'])
 
+    def _view_ppb_internal(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        self.viewmodel.handle_result_selection(values[0], values[1])
+        try: self.viewmodel.view.tabview.set("Conteúdo PPB")
+        except ValueError: pass
+
+    def _view_ppb_browser(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        self.viewmodel.handle_result_selection(values[0], values[1])
+        self.viewmodel.open_ppb_browser_from_db()
+
+    def _view_ppr_internal(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        self.viewmodel.handle_result_selection(values[0], values[1])
+        try: self.viewmodel.view.tabview.set("Conteúdo PPR")
+        except ValueError: pass
+
+    def _view_ppr_browser(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        self.viewmodel.handle_result_selection(values[0], values[1])
+        self.viewmodel.open_ppr_in_browser()
+
+    def _open_url(self, url):
+        if url: webbrowser.open(url)
+
     def _setup_context_menu(self):
         self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="🕷️ Scrap Busca", command=self._scrape_selected_row)
-        self.context_menu.add_command(label="📂 Scrap Repositório", command=self._scrape_repo_row)
+        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
+        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row)
+        self.context_menu.add_separator()        
+        self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
+        self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="🎓 Extrair Dados Univ.", command=self.viewmodel.extract_univ_data)
+        self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
+        self.context_menu.add_command(label="🌐 Abrir PPR no Navegador", command=self._view_ppr_browser)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (via PPR)", command=self.viewmodel.extract_univ_data)
 
     def _show_context_menu(self, event):
         row = self.tree.identify_row(event.y)
