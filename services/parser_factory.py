@@ -27,6 +27,7 @@ from parsers.cefetmg_parser import CefetMgParser
 from parsers.upf_parser import UpfParser
 from parsers.sucupira_parser import SucupiraParser
 from parsers.udesc_parser import UdescParser
+from parsers.siduece_parser import SidUeceParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
@@ -38,6 +39,8 @@ class ParserFactory:
         self.config_map = self._load_config(config_path)
         
         self._custom_map = {
+            'siduece.uece.br': SidUeceParser,
+            '.uece.br': SidUeceParser,
             'repositorio.udesc.br': UdescParser,
             'repositorio-api.udesc.br': UdescParser,
             '.udesc.br': UdescParser,
