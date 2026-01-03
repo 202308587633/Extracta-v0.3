@@ -1,5 +1,8 @@
 import json
 import os
+
+from models.parsers.vufind_parser import VufindParser
+
 from parsers.generic_parser import GenericParser
 from parsers.dspace_jspui import DSpaceJSPUIParser
 from parsers.dspace_angular import DSpaceAngularParser
@@ -12,8 +15,10 @@ from parsers.uepg_parser import UEPGParser
 from parsers.unicap_parser import UnicapParser
 from parsers.ufpa_parser import UFPAParser
 from parsers.unisa_parser import UnisaParser
-from parsers.uniceub_parser import UniceubParser # <--- [1] IMPORTAÇÃO
-from models.parsers.vufind_parser import VufindParser
+from parsers.uniceub_parser import UniceubParser
+from parsers.ufmt_parser import UfmtParser
+from parsers.unifor_parser import UniforParser
+from parsers.unisinos_parser import UnisinosParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
@@ -25,6 +30,11 @@ class ParserFactory:
         self.config_map = self._load_config(config_path)
         
         self._custom_map = {
+            'repositorio.jesuita.org.br': UnisinosParser, 
+            '.unisinos.br': UnisinosParser,
+            'biblioteca.sophia.com.br': UniforParser, 
+            'uol.unifor.br': UniforParser,
+            '.ufmt.br': UfmtParser,
             '.usp.br': USPParser,
             '.ucs.br': UcsParser,
             '.uepg.br': UEPGParser,
