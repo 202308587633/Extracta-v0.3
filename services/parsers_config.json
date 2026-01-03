@@ -71,6 +71,8 @@
     "dspace.sti.ufcg.edu.br": "UfcgParser",
     ".ufcg.edu.br": "UfcgParser",
 
-    "repositorio.enap.gov.br": "EnapParser"
+    "repositorio.enap.gov.br": "EnapParser",
+
+    "repositorio.idp.edu.br": "IdpParser"
   }
 }
