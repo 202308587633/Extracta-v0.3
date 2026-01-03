@@ -1,25 +1,23 @@
 import requests
+import time
+import config  # Importa o config
 from bs4 import BeautifulSoup
-from requests.exceptions import RequestException, Timeout, ConnectionError, HTTPError
 
 class ScraperModel:
+    def __init__(self):
+        # Usa configurações do config.py
+        self.headers = {'User-Agent': config.USER_AGENT}
+        self.timeout = config.REQUEST_TIMEOUT
+        self.delay = config.DELAY_BETWEEN_REQUESTS
+
     def fetch_html(self, url):
-        if not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
+        """Faz a requisição HTTP e retorna o HTML."""
+        time.sleep(self.delay)  # Delay configurável
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, headers=self.headers, timeout=self.timeout)
             response.raise_for_status()
             return response.text
-        except Timeout:
-            raise Exception("Erro: O servidor demorou muito a responder (Timeout).")
-        except ConnectionError:
-            raise Exception("Erro: Falha na ligação. Verifique a sua internet.")
-        except HTTPError as e:
-            raise Exception(f"Erro HTTP: O servidor retornou o código {e.response.status_code}.")
-        except RequestException as e:
-            raise Exception(f"Erro de Rede: {str(e)}")
-
-    def extract_data(self, html_content, parser, base_url=""):
-        """Usa um parser específico para extrair dados do HTML"""
-        soup = BeautifulSoup(html_content, 'html.parser')
-        return parser.parse(soup, base_url)
+        except requests.RequestException as e:
+            # Em produção, idealmente logar isso
+            print(f"Erro no request: {e}")
+            raise e

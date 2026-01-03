@@ -76,7 +76,7 @@ class HomeTab(ctk.CTkFrame):
             command=self._update_url_entry
         )
         # Define valor padrão seguro
-        default_year = self.default_years[-1] if self.default_years else "2024"
+        default_year = "Ano"
         self.cmb_year.set(default_year)
         self.cmb_year.pack(side="left", padx=5)
 

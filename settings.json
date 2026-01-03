@@ -1,0 +1,22 @@
+{
+    "REQUEST_TIMEOUT": 30.0,
+    "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "DELAY_BETWEEN_REQUESTS": 1.5,
+    "THEME_MODE": "System",
+    "DEFAULT_SEARCH_TERMS": [
+        "jurimetria",
+        "\"inteligência artificial\"",
+        "\"análise de discurso\"",
+        "algoritmo",
+        "\"direito digital\"",
+        "\"tecnologia da informação\""
+    ],
+    "DEFAULT_YEARS": [
+        "2020",
+        "2021",
+        "2022",
+        "2023",
+        "2024",
+        "2025"
+    ]
+}
