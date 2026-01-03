@@ -13,10 +13,7 @@ from parsers.unicap_parser import UnicapParser
 from parsers.ufpa_parser import UFPAParser
 from parsers.unisa_parser import UnisaParser
 from parsers.uniceub_parser import UniceubParser # <--- [1] IMPORTAÇÃO
-try:
-    from models.parsers.vufind_parser import VufindParser
-except ImportError:
-    from parsers.vufind_parser import VufindParser
+from models.parsers.vufind_parser import VufindParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):

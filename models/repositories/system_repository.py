@@ -23,16 +23,6 @@ class SystemRepository(BaseRepository):
         except Exception as e:
             print(f"Erro ao atualizar source: {e}")
 
-    def get_disabled_sources(self):
-        """Retorna lista de URLs raízes que estão desativadas (status = 0)."""
-        try:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT root_url FROM sources WHERE status = 0 ORDER BY root_url")
-                return [row[0] for row in cursor.fetchall()]
-        except:
-            return []
-
     def is_source_allowed(self, url):
         """Verifica se a URL raiz está marcada como ativa (1)."""
         from urllib.parse import urlparse
@@ -60,3 +50,24 @@ class SystemRepository(BaseRepository):
                 return {row[0]: row[1] for row in cursor.fetchall()}
         except:
             return {}
+
+    def reset_blocked_sources(self):
+        """Remove todas as fontes que estão marcadas como desativadas (status = 0)."""
+        try:
+            with self.db.get_connection() as conn:
+                conn.execute("DELETE FROM sources WHERE status = 0")
+                conn.commit()
+            return True
+        except Exception as e:
+            print(f"Erro ao resetar fontes bloqueadas: {e}")
+            return False
+
+    def get_disabled_sources(self):
+        """Retorna lista de URLs raízes que estão desativadas (status = 0)."""
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT root_url FROM sources WHERE status = 0 ORDER BY root_url")
+                return [row[0] for row in cursor.fetchall()]
+        except:
+            return []
