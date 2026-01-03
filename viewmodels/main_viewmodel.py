@@ -8,6 +8,9 @@ from viewmodels.home_viewmodel import HomeViewModel
 from viewmodels.history_viewmodel import HistoryViewModel
 from viewmodels.results_viewmodel import ResultsViewModel
 
+from tkinter import messagebox
+import config # Importe o config
+
 class MainViewModel:
     def __init__(self, view):
         self.view = view
@@ -116,3 +119,13 @@ class MainViewModel:
 
     def update_status(self, message, color="white"):
         self.view.update_status(message, color)
+        
+    def maintenance_clear_db(self):
+        """Ação do botão 'Limpar Banco' no painel de manutenção."""
+        if messagebox.askyesno("⚠️ Perigo", "Isso apagará TODO o histórico e resultados capturados.\nTem certeza absoluta?"):
+            try:
+                self.db_manager.clear_all_tables()
+                self.initialize_data() # Recarrega as tabelas vazias
+                self.update_status("Banco de dados resetado com sucesso.", "yellow")
+            except Exception as e:
+                self.update_status(f"Erro ao limpar banco: {e}", "red")

@@ -114,3 +114,19 @@ class DatabaseManager:
                 cursor.execute("ALTER TABLE pesquisas ADD COLUMN search_year TEXT")
             
             conn.commit()
+            
+    def clear_all_tables(self):
+        """Limpa todas as tabelas (Zera o banco)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # Desativa chaves estrangeiras temporariamente
+            cursor.execute("PRAGMA foreign_keys = OFF;")
+            
+            tables = ['ppb', 'ppr', 'pesquisas', 'plb', 'logs', 'sources']
+            for table in tables:
+                cursor.execute(f"DELETE FROM {table}")
+                # Reinicia o contador de ID (Auto Increment)
+                cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table}'")
+            
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            conn.commit()

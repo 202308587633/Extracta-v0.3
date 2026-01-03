@@ -135,7 +135,49 @@ class MainView(ctk.CTk):
             webbrowser.open(f"file://{f.name}")
 
     def switch_to_content_tab(self): self.tabview.set("Conteúdo PPB")
+
     def switch_to_results_tab(self): self.tabview.set("Resultados")
+
     def set_tab_state(self, tab, state):
         try: self.tabview._segmented_button._buttons_dict[tab].configure(state=state)
         except: pass
+        
+    def _setup_sidebar(self):
+        self.sidebar_frame = ctk.CTkFrame(self, width=140, corner_radius=0)
+        self.sidebar_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
+        self.sidebar_frame.grid_rowconfigure(2, weight=1) # Empurra o resto para baixo se precisar
+
+        # 1. Logo
+        self.logo_label = ctk.CTkLabel(self.sidebar_frame, text=config.APP_TITLE, font=config.FONTS["logo"])
+        self.logo_label.grid(row=0, column=0, padx=20, pady=(20, 10))
+
+        # 2. Painel de Manutenção (Novo)
+        self.maintenance_frame = ctk.CTkFrame(self.sidebar_frame, fg_color=config.COLORS["panel_bg"])
+        self.maintenance_frame.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+        
+        lbl_maint = ctk.CTkLabel(self.maintenance_frame, text="🔧 Manutenção", 
+                                 font=config.FONTS["small"], text_color="gray")
+        lbl_maint.pack(pady=(5, 0))
+
+        # Botão Limpar Banco
+        self.btn_clear_db = ctk.CTkButton(
+            self.maintenance_frame, 
+            text="🗑️ Limpar Banco",
+            command=self.viewmodel.maintenance_clear_db,
+            fg_color="#c0392b", 
+            hover_color="#e74c3c",
+            height=25,
+            font=config.FONTS["small"]
+        )
+        self.btn_clear_db.pack(padx=10, pady=10, fill="x")
+
+        # Botão Recarregar (Opcional, útil para debug)
+        self.btn_reload = ctk.CTkButton(
+            self.maintenance_frame, 
+            text="🔄 Recarregar",
+            command=self.viewmodel.initialize_data,
+            fg_color="gray",
+            height=25,
+            font=config.FONTS["small"]
+        )
+        self.btn_reload.pack(padx=10, pady=(0, 10), fill="x")

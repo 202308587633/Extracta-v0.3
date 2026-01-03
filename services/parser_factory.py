@@ -9,10 +9,7 @@ from parsers.bdtd_parser import BDTDParser
 # (Exemplo: USPParser, VufindParser. Os simples podem ser removidos daqui)
 from parsers.usp_parser import USPParser
 from parsers.ucs_parser import UcsParser 
-try:
-    from parsers.vufind_parser import VufindParser
-except ImportError:
-    from models.parsers.vufind_parser import VufindParser
+from models.parsers.vufind_parser import VufindParser
 
 # Adicione outros imports de classes CUSTOMIZADAS se necessário (ex: UfrgsParser se tiver lógica única)
 

@@ -1,4 +1,5 @@
 import customtkinter as ctk
+import config
 from urllib.parse import quote
 
 class HomeTab(ctk.CTkFrame):
@@ -31,102 +32,86 @@ class HomeTab(ctk.CTkFrame):
         super().__init__(parent)
         self.command_callback = command_callback
         
-        # --- Definições Padrão ---
-        self.default_terms = [
-            "jurimetria", "inteligência artificial", "análise de discurso", 
-            "algoritmo", "direito digital", "tecnologia da informação"
-        ]
-        self.default_years = [str(y) for y in range(2020, 2026)]
-        
-        # Armazena histórico para evitar repetição: set de tuplas (termo, ano)
-        self.executed_searches = set()
-        
+        # Garante que as listas do config sejam carregadas
+        self.executed_searches = set() 
+        self.default_terms = config.DEFAULT_SEARCH_TERMS
+        self.default_years = config.DEFAULT_YEARS
+
         self._setup_ui()
 
     def _setup_ui(self):
-        # Configuração de Grid Principal
+        # 1. Configuração do Layout Principal
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=0) 
-        self.grid_rowconfigure(1, weight=1) 
+        self.grid_rowconfigure(2, weight=1) # Faz a área de texto (linha 2) expandir
 
-        self.center_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.center_frame.grid(row=0, column=0, sticky="ew", padx=40, pady=10)
-        self.center_frame.grid_columnconfigure(0, weight=1)
-        self.center_frame.grid_columnconfigure(1, weight=0)
+        # 2. CRIAÇÃO DO CONTAINER (Correção: Deve vir antes de adicionar widgets nele)
+        self.container = ctk.CTkFrame(self, fg_color="transparent")
+        self.container.grid(row=0, column=0, sticky="ew", padx=20, pady=20)
+        
+        # 3. Cabeçalho
+        lbl_title = ctk.CTkLabel(self.container, text="Nova Pesquisa (BDTD)", font=("Roboto", 16, "bold"))
+        lbl_title.pack(anchor="w", pady=(0, 10))
 
-        self.label_title = ctk.CTkLabel(
-            self.center_frame, 
-            text="Extracta - Extrator de Dados Científicos", 
-            font=("Roboto", 24, "bold")
-        )
-        self.label_title.grid(row=0, column=0, columnspan=2, pady=(0, 20))
+        # 4. Filtros de Pesquisa
+        self.filter_frame = ctk.CTkFrame(self.container, fg_color="transparent")
+        self.filter_frame.pack(fill="x", pady=5)
 
-        # --- TERMOS ---
-        self.lbl_terms = ctk.CTkLabel(self.center_frame, text="Termo de Pesquisa:", font=("Roboto", 12))
-        self.lbl_terms.grid(row=1, column=0, sticky="w", padx=5, pady=(0, 2))
-
+        # ComboBox Termos
+        ctk.CTkLabel(self.filter_frame, text="Termo:").pack(side="left", padx=(0, 5))
         self.cmb_terms = ctk.CTkComboBox(
-            self.center_frame, 
+            self.filter_frame, 
             values=self.default_terms,
-            command=self._on_term_selected, # <--- MUDANÇA: Aciona filtro de anos ao selecionar termo
-            width=400
+            width=300,
+            command=self._on_term_change
         )
-        self.cmb_terms.grid(row=2, column=0, sticky="ew", padx=5, pady=(0, 15))
         self.cmb_terms.set("Selecione um termo...")
+        self.cmb_terms.pack(side="left", padx=5)
 
-        # --- ANOS ---
-        self.lbl_year = ctk.CTkLabel(self.center_frame, text="Ano:", font=("Roboto", 12))
-        self.lbl_year.grid(row=1, column=1, sticky="w", padx=5, pady=(0, 2))
-
+        # ComboBox Anos
+        ctk.CTkLabel(self.filter_frame, text="Ano:").pack(side="left", padx=(15, 5))
         self.cmb_year = ctk.CTkComboBox(
-            self.center_frame, 
+            self.filter_frame,
             values=self.default_years,
-            command=self._update_url_entry,
-            width=100
+            width=100,
+            command=self._update_url_entry
         )
-        self.cmb_year.grid(row=2, column=1, sticky="e", padx=5, pady=(0, 15))
-        self.cmb_year.set("Ano")
+        # Define valor padrão seguro
+        default_year = self.default_years[-1] if self.default_years else "2024"
+        self.cmb_year.set(default_year)
+        self.cmb_year.pack(side="left", padx=5)
 
-        # --- URL e Botões ---
-        self.label_info = ctk.CTkLabel(
-            self.center_frame, text="URL da Pesquisa (BDTD / Catálogo de Teses):",
-            font=("Roboto", 14)
-        )
-        self.label_info.grid(row=3, column=0, columnspan=2, pady=(10, 5), sticky="w", padx=5)
+        # 5. Entrada de URL
+        lbl_url = ctk.CTkLabel(self.container, text="URL Gerada:", font=("Roboto", 12))
+        lbl_url.pack(anchor="w", pady=(15, 0))
 
-        self.url_entry = ctk.CTkEntry(
-            self.center_frame, placeholder_text="Cole a URL aqui ou use os filtros acima...",
-            height=40, font=("Roboto", 12)
-        )
-        self.url_entry.grid(row=4, column=0, columnspan=2, sticky="ew", padx=5, pady=(0, 20))
-
+        self.url_entry = ctk.CTkEntry(self.container, width=600)
+        self.url_entry.pack(fill="x", pady=(5, 10))
+        
+        # Botão Iniciar
         self.btn_start = ctk.CTkButton(
-            self.center_frame, text="🚀 Iniciar Scraping", 
-            command=self.command_callback, height=50,
-            font=("Roboto", 16, "bold"), fg_color="#1f538d", hover_color="#14375e"
+            self.container, 
+            text="🚀 Iniciar Mineração", 
+            command=self.command_callback,
+            height=40,
+            font=("Roboto", 14, "bold"),
+            fg_color="#009688", 
+            hover_color="#00796b"
         )
-        self.btn_start.grid(row=5, column=0, columnspan=2, sticky="ew", padx=5)
+        self.btn_start.pack(fill="x", pady=10)
 
-        self.label_help = ctk.CTkLabel(
-            self.center_frame,
-            text="O sistema processará a página de resultados e baixará as teses automaticamente.",
-            text_color="gray", font=("Roboto", 11)
-        )
-        self.label_help.grid(row=6, column=0, columnspan=2, pady=10)
-
-        # --- Resultado HTML (Inferior) ---
+        # 6. Área de Resultado (Fica fora do container, direto no self, para expandir)
         self.result_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.result_frame.grid(row=1, column=0, sticky="nsew", padx=40, pady=(0, 20))
-        self.result_frame.grid_columnconfigure(0, weight=1)
-        self.result_frame.grid_rowconfigure(1, weight=1)
+        self.result_frame.grid(row=2, column=0, sticky="nsew", padx=20, pady=(0, 20))
+        
+        lbl_res = ctk.CTkLabel(self.result_frame, text="Pré-visualização do HTML:", anchor="w")
+        lbl_res.pack(fill="x")
 
-        self.label_preview = ctk.CTkLabel(self.result_frame, text="Pré-visualização do HTML (PLB):", font=("Roboto", 12, "bold"))
-        self.label_preview.grid(row=0, column=0, sticky="w", pady=(5, 5))
-
-        self.textbox_result = ctk.CTkTextbox(self.result_frame, font=("Consolas", 11), activate_scrollbars=True)
-        self.textbox_result.grid(row=1, column=0, sticky="nsew")
-        self.textbox_result.insert("0.0", "O código HTML da página capturada aparecerá aqui...")
+        self.textbox_result = ctk.CTkTextbox(self.result_frame, wrap="none")
+        self.textbox_result.pack(fill="both", expand=True)
         self.textbox_result.configure(state="disabled")
+
+        # Inicializa a URL com os valores padrão
+        self._update_url_entry()
 
     def update_executed_searches(self, executed_list):
         """Atualiza a lista interna de pesquisas já realizadas (vindas do banco)."""
@@ -179,5 +164,62 @@ class HomeTab(ctk.CTkFrame):
             f"?lookfor=%22{safe_term}%22&type=AllFields"
             f"&daterange[]=publishDate&publishDatefrom={year}&publishDateto={year}"
         )
+        self.url_entry.delete(0, "end")
+        self.url_entry.insert(0, url)
+
+    def update_executed_searches(self, existing_list):
+        """Recebe lista de (termo, ano) já pesquisados para filtrar as opções."""
+        # existing_list vem do banco como [(termo, ano), ...]
+        self.executed_searches = set()
+        for t, y in existing_list:
+            if t and y:
+                self.executed_searches.add((t.lower().strip(), str(y).strip()))
+        
+        # Atualiza a interface para refletir o que já foi feito (se houver termo selecionado)
+        if hasattr(self, 'cmb_terms') and self.cmb_terms.get():
+            self._on_term_change(self.cmb_terms.get())
+
+    def _on_term_change(self, selected_term):
+        """Filtra os anos disponíveis com base no termo selecionado."""
+        if not selected_term or selected_term == "Selecione um termo...":
+            return
+
+        term_key = selected_term.lower().strip()
+        available_years = []
+
+        # Para cada ano padrão, verifica se já foi pesquisado com este termo
+        for year in self.default_years:
+            if (term_key, year) not in self.executed_searches:
+                available_years.append(year)
+        
+        # Atualiza a ComboBox de Anos
+        if available_years:
+            self.cmb_year.configure(values=available_years)
+            self.cmb_year.set(available_years[0]) # Seleciona o primeiro disponível
+        else:
+            self.cmb_year.configure(values=["Concluído"])
+            self.cmb_year.set("Concluído") # Indica que todos os anos para este termo já foram feitos
+
+        # Atualiza a URL
+        self._update_url_entry()
+
+    def _update_url_entry(self, _=None):
+        # Verifica se os widgets já foram criados para evitar erro na inicialização
+        if not hasattr(self, 'cmb_terms') or not hasattr(self, 'cmb_year'):
+            return
+
+        term = self.cmb_terms.get()
+        year = self.cmb_year.get()
+        
+        # Validações para não gerar URL inválida
+        if term == "Selecione um termo..." or not term: return
+        if year == "Concluído" or not year: return
+        
+        safe_term = quote(term)
+        url = (
+            f"https://bdtd.ibict.br/vufind/Search/Results"
+            f"?lookfor={safe_term}&type=AllFields&filter%5B%5D=publishDate%3A%22{year}%22"
+        )
+        
         self.url_entry.delete(0, "end")
         self.url_entry.insert(0, url)
