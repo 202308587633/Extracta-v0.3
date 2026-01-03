@@ -8,7 +8,11 @@ from parsers.bdtd_parser import BDTDParser
 # Importe APENAS os parsers que possuem lógica customizada complexa
 from parsers.usp_parser import USPParser
 from parsers.ucs_parser import UcsParser 
-from models.parsers.vufind_parser import VufindParser
+from parsers.uepg_parser import UEPGParser  # <--- [1] IMPORTAÇÃO ADICIONADA
+try:
+    from models.parsers.vufind_parser import VufindParser
+except ImportError:
+    from parsers.vufind_parser import VufindParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
@@ -22,6 +26,8 @@ class ParserFactory:
         self._custom_map = {
             '.usp.br': USPParser,
             '.ucs.br': UcsParser,
+            '.uepg.br': UEPGParser,        # <--- [2] REGISTRO ADICIONADO
+            'tede2.uepg.br': UEPGParser,   # <--- [2] REGISTRO ADICIONADO
         }
 
     def _load_config(self, path):
@@ -36,7 +42,7 @@ class ParserFactory:
         if not url: return self._default
         url_lower = url.lower()
         
-        # 1. Customizados
+        # 1. Customizados (Prioridade Alta)
         for domain, parser_cls in self._custom_map.items():
             if domain in url_lower: return parser_cls()
 
@@ -53,14 +59,11 @@ class ParserFactory:
             soup = BeautifulSoup(html_content, 'html.parser')
             html_lower = html_content.lower()
 
-            # --- CORREÇÃO AQUI ---
-            # Se for BDTD/Vufind, usamos o VufindParser para extrair a LISTA de resultados
             if "vufind" in html_lower or "bdtd.ibict.br" in url_lower:
-                # Verifica se é uma página de busca (lista) ou detalhe
                 if "search/results" in url_lower or soup.select('.result'):
                     return VufindParser()
                 else:
-                    return BDTDParser() # Página de detalhes
+                    return BDTDParser() 
 
             if soup.find('ds-app') or soup.find('ds-root'):
                 return DSpaceAngularParser(sigla="DSpace7", universidade="Não identificada")
