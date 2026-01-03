@@ -3,6 +3,7 @@ import time
 import webbrowser
 import traceback
 from viewmodels.base_viewmodel import BaseViewModel
+from urllib.parse import urlparse
 
 class ResultsViewModel(BaseViewModel):
     def __init__(self, results_repo, system_repo, scraper, view):
@@ -31,12 +32,35 @@ class ResultsViewModel(BaseViewModel):
     def scrape_pending_pprs(self):
         pending = self.repo.get_pending_ppr()
         if not pending:
-            self._log("Nenhum HTML pendente (pesquisas sem link ou já baixadas).", "green")
+            self._log("Nenhum HTML pendente.", "green")
             return
         
-        self._log(f"Baixando {len(pending)} pendentes...", "yellow")
+        self._log(f"Baixando {len(pending)} pendentes (fontes ativas)...", "yellow")
         self._toggle_ui(busy=True)
-        threading.Thread(target=self._run_batch_download, args=(pending,)).start()
+        # Modo normal: force=False
+        threading.Thread(target=self._run_batch_download, args=(pending, False)).start()
+
+    def force_scrape_specific_source(self, root_url):
+        if not root_url:
+            self._log("Selecione uma fonte para forçar.", "red")
+            return
+
+        all_pending = self.repo.get_pending_ppr()
+        
+        # Filtra apenas os links que pertencem à raiz selecionada
+        target_list = []
+        for pid, url in all_pending:
+            if root_url in url:
+                target_list.append((pid, url))
+        
+        if not target_list:
+            self._log(f"Nenhum item pendente encontrado para a fonte: {root_url}", "yellow")
+            return
+
+        self._log(f"Forçando download de {len(target_list)} itens da fonte {root_url}...", "yellow")
+        self._toggle_ui(busy=True)
+        # Modo forçado: force=True (ignora status desativado)
+        threading.Thread(target=self._run_batch_download, args=(target_list, True)).start()
 
     def scrape_specific_url(self, url, doc_type):
         self._log(f"Baixando {doc_type}: {url}", "yellow")
@@ -57,7 +81,7 @@ class ResultsViewModel(BaseViewModel):
             self._update_source_status(url, False)
             self._log(f"Erro: {e}", "red")
 
-    def _run_batch_download(self, pending_list):
+    def _run_batch_download(self, pending_list, force=False):
         self._stop_flag = False
         count = 0
         total = len(pending_list)
@@ -67,9 +91,12 @@ class ResultsViewModel(BaseViewModel):
                 self._log("Download em lote interrompido pelo usuário.", "red")
                 break
 
-            if not self._check_source_allowed(url): 
-                self._log(f"Fonte bloqueada/ignorada: {url}", "red")
-                continue
+            # Se NÃO for forçado, verifica se a fonte está permitida
+            if not force:
+                if not self._check_source_allowed(url): 
+                    # Log silencioso ou apenas no console para não poluir demais se houver muitos bloqueados
+                    print(f"Fonte bloqueada/ignorada: {url}")
+                    continue
 
             try:
                 self._log(f"[{idx+1}/{total}] Baixando...", "white")
@@ -111,7 +138,6 @@ class ResultsViewModel(BaseViewModel):
         threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
 
     def extract_single_data(self, title, author):
-        # CORREÇÃO: Busca (URL, HTML) para garantir escolha correta do parser
         ppr_data = self.repo.get_ppr_data(title, author)
         
         if not ppr_data or not ppr_data[1]:
@@ -119,8 +145,6 @@ class ResultsViewModel(BaseViewModel):
             return
         
         url, html = ppr_data
-        
-        # Cria lista compatível com _run_univ_extraction: [(title, author, url, html)]
         records = [(title, author, url, html)]
         
         self._log(f"Extraindo dados individuais (URL: {url})...", "yellow")
@@ -160,3 +184,11 @@ class ResultsViewModel(BaseViewModel):
         self._log(f"Extração finalizada. {count_success} registros atualizados.", "green")
         self.load_results()
         self._log("Processo finalizado. Aguardando novos comandos.", "white")
+        
+    # --- Auxiliares UI ---
+    
+    def get_disabled_sources_list(self):
+        """Retorna lista de fontes desativadas para a ComboBox."""
+        # CORREÇÃO: O nome correto do atributo na classe base é self.sys_repo
+        return self.sys_repo.get_disabled_sources()
+    
