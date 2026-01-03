@@ -20,7 +20,7 @@ class DatabaseManager:
         return sqlite3.connect(self.db_name, check_same_thread=False)
 
     def _init_schema(self):
-        """Cria as tabelas se não existirem."""
+        """Cria as tabelas se não existirem (para novos bancos)."""
         with self.get_connection() as conn:
             conn.execute("PRAGMA journal_mode=WAL;")
             cursor = conn.cursor()
@@ -55,6 +55,7 @@ class DatabaseManager:
             """)
             
             # Tabelas de Conteúdo (PPB e PPR)
+            # ATUALIZADO: Incluída coluna extracted_at na criação
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ppb (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +63,7 @@ class DatabaseManager:
                     url TEXT NOT NULL,
                     html_content TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    extracted_at TIMESTAMP,
                     FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
                 )
             """)
@@ -72,6 +74,7 @@ class DatabaseManager:
                     url TEXT NOT NULL,
                     html_content TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    extracted_at TIMESTAMP,
                     FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
                 )
             """)
@@ -97,7 +100,7 @@ class DatabaseManager:
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Migração para PLB
+            # Migração para PLB (Termos e Anos)
             cursor.execute("PRAGMA table_info(plb)")
             cols_plb = [info[1] for info in cursor.fetchall()]
             if 'search_term' not in cols_plb:
@@ -105,7 +108,7 @@ class DatabaseManager:
             if 'search_year' not in cols_plb:
                 cursor.execute("ALTER TABLE plb ADD COLUMN search_year TEXT")
 
-            # Migração para Pesquisas
+            # Migração para Pesquisas (Termos e Anos)
             cursor.execute("PRAGMA table_info(pesquisas)")
             cols_pesq = [info[1] for info in cursor.fetchall()]
             if 'search_term' not in cols_pesq:
@@ -113,19 +116,31 @@ class DatabaseManager:
             if 'search_year' not in cols_pesq:
                 cursor.execute("ALTER TABLE pesquisas ADD COLUMN search_year TEXT")
             
+            # --- NOVA MIGRAÇÃO: Corrigir erro 'no such column: extracted_at' ---
+            
+            # Para tabela PPB
+            cursor.execute("PRAGMA table_info(ppb)")
+            cols_ppb = [info[1] for info in cursor.fetchall()]
+            if 'extracted_at' not in cols_ppb:
+                cursor.execute("ALTER TABLE ppb ADD COLUMN extracted_at TIMESTAMP")
+            
+            # Para tabela PPR
+            cursor.execute("PRAGMA table_info(ppr)")
+            cols_ppr = [info[1] for info in cursor.fetchall()]
+            if 'extracted_at' not in cols_ppr:
+                cursor.execute("ALTER TABLE ppr ADD COLUMN extracted_at TIMESTAMP")
+            
             conn.commit()
             
     def clear_all_tables(self):
         """Limpa todas as tabelas (Zera o banco)."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            # Desativa chaves estrangeiras temporariamente
             cursor.execute("PRAGMA foreign_keys = OFF;")
             
             tables = ['ppb', 'ppr', 'pesquisas', 'plb', 'logs', 'sources']
             for table in tables:
                 cursor.execute(f"DELETE FROM {table}")
-                # Reinicia o contador de ID (Auto Increment)
                 cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table}'")
             
             cursor.execute("PRAGMA foreign_keys = ON;")
