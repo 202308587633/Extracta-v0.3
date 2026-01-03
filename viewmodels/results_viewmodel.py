@@ -6,10 +6,10 @@ from viewmodels.base_viewmodel import BaseViewModel
 
 class ResultsViewModel(BaseViewModel):
     def __init__(self, results_repo, system_repo, scraper, view):
-        super().__init__(system_repo, view) # Passa view para o Base
+        super().__init__(system_repo, view)
         self.repo = results_repo
         self.scraper = scraper
-        self._stop_flag = False # Controle de interrupção
+        self._stop_flag = False
 
     def load_results(self):
         self._log("Recarregando tabela de resultados...", "white")
@@ -24,7 +24,6 @@ class ResultsViewModel(BaseViewModel):
         self._log("🛑 Solicitado parada do processo...", "yellow")
 
     def _toggle_ui(self, busy):
-        """Habilita ou desabilita botões na interface."""
         self.view.after_thread_safe(lambda: self.view.results_tab.set_stop_button_state(busy))
 
     # --- Downloads (Scraping) ---
@@ -36,7 +35,7 @@ class ResultsViewModel(BaseViewModel):
             return
         
         self._log(f"Baixando {len(pending)} pendentes...", "yellow")
-        self._toggle_ui(busy=True) # Bloqueia UI
+        self._toggle_ui(busy=True)
         threading.Thread(target=self._run_batch_download, args=(pending,)).start()
 
     def scrape_specific_url(self, url, doc_type):
@@ -52,7 +51,8 @@ class ResultsViewModel(BaseViewModel):
                 self._log("Conteúdo salvo com sucesso.", "green")
                 self.load_results()
             else:
-                self._log("Conteúdo vazio recebido.", "red")
+                self._update_source_status(url, False)
+                self._log("Conteúdo vazio. Fonte marcada como instável.", "red")
         except Exception as e:
             self._update_source_status(url, False)
             self._log(f"Erro: {e}", "red")
@@ -63,33 +63,40 @@ class ResultsViewModel(BaseViewModel):
         total = len(pending_list)
         
         for idx, (pid, url) in enumerate(pending_list):
-            # 1. Verifica Parada
             if self._stop_flag:
                 self._log("Download em lote interrompido pelo usuário.", "red")
                 break
 
             if not self._check_source_allowed(url): 
-                self._log(f"Fonte bloqueada: {url}", "red")
+                self._log(f"Fonte bloqueada/ignorada: {url}", "red")
                 continue
+
             try:
                 self._log(f"[{idx+1}/{total}] Baixando...", "white")
                 html = self.scraper.fetch_html(url)
                 if html:
                     self.repo.save_content(url, html, 'repositorio')
-                    self._update_source_status(url, True)
+                    self._update_source_status(url, True) # Sucesso
                     count += 1
+                else:
+                    self._update_source_status(url, False) # Falha (Vazio)
+                    self._log(f"Falha (Vazio): {url}", "red")
+
                 time.sleep(1.0)
             except Exception as e:
+                self._update_source_status(url, False) # Erro
                 self._log(f"Erro ao baixar {url}: {e}", "red")
         
-        self._toggle_ui(busy=False) # Libera UI
+        self._toggle_ui(busy=False)
         self._log(f"Lote concluído: {count} salvos.", "green")
         self.load_results()
+        
+        # --- CORREÇÃO: Mensagem final para atualizar o status ---
+        self._log("Processo finalizado. Aguardando novos comandos.", "white")
 
     # --- Extração Universitária (Parser) ---
 
     def batch_extract_univ_data(self):
-        """Chamado pelo botão 'Extrair Dados Univ. (Lote)'."""
         self._log("Verificando registros para extração...", "yellow")
         try:
             records = self.repo.get_all_ppr_with_html()
@@ -103,22 +110,19 @@ class ResultsViewModel(BaseViewModel):
             return
         
         self._log(f"Iniciando análise de {len(records)} repositórios...", "yellow")
-        self._toggle_ui(busy=True) # Bloqueia UI
+        self._toggle_ui(busy=True)
         threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
 
     def extract_single_data(self, title, author):
-        """Extração individual via menu de contexto."""
         html = self.repo.get_extracted_html(title, author, 'ppr')
         if not html:
             self._log("HTML do Repositório (PPR) não encontrado. Faça o download primeiro.", "red")
             return
         
-        self._log(f"Extraindo dados de: {title[:30]}...", "yellow")
         records = [(title, author, "", html)]
         threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
 
     def _run_univ_extraction(self, records):
-        """Roda a extração em thread segura com tratamento de erros."""
         self._stop_flag = False
         try:
             from services.parser_factory import ParserFactory
@@ -136,7 +140,6 @@ class ResultsViewModel(BaseViewModel):
         total = len(records)
         
         for idx, (title, author, url, html) in enumerate(records):
-            # 1. Verifica Parada
             if self._stop_flag:
                 self._log("Extração interrompida pelo usuário.", "red")
                 break
@@ -159,6 +162,9 @@ class ResultsViewModel(BaseViewModel):
             except Exception as e:
                 print(f"Erro no registro {idx}: {e}")
 
-        self._toggle_ui(busy=False) # Libera UI
+        self._toggle_ui(busy=False)
         self._log(f"Extração finalizada. {count_success} registros atualizados.", "green")
         self.load_results()
+        
+        # --- CORREÇÃO: Mensagem final para atualizar o status ---
+        self._log("Processo finalizado. Aguardando novos comandos.", "white")

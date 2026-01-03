@@ -41,6 +41,15 @@ COLORS = {
     "table_selected": "#1f538d"
 }
 
+# --- NOVO: Cores das Linhas da Tabela (Background) ---
+# Usamos tons escuros/pastéis para manter o texto legível no tema Dark
+ROW_COLORS = {
+    "complete": "#1b4d3e",  # Verde escuro (Tem tudo)
+    "ppb_only": "#5c5c00",  # Amarelo escuro/Oliva (Só Busca)
+    "ppr_only": "#7d4a00",  # Laranja/Marrom (Só Repositório - raro)
+    "empty": "#4a1818"      # Vermelho escuro (Sem HTML)
+}
+
 FONTS = {
     "logo": ("Roboto", 20, "bold"),
     "header": ("Roboto", 16, "bold"),
@@ -62,8 +71,11 @@ def load_settings():
             globals()['DELAY_BETWEEN_REQUESTS'] = data.get('DELAY_BETWEEN_REQUESTS', DELAY_BETWEEN_REQUESTS)
             globals()['THEME_MODE'] = data.get('THEME_MODE', THEME_MODE)
             globals()['DEFAULT_SEARCH_TERMS'] = data.get('DEFAULT_SEARCH_TERMS', DEFAULT_SEARCH_TERMS)
-            # ADICIONADO: Carregar anos
             globals()['DEFAULT_YEARS'] = data.get('DEFAULT_YEARS', DEFAULT_YEARS)
+            
+            # Carrega template se existir
+            globals()['SEARCH_URL_TEMPLATE'] = data.get('SEARCH_URL_TEMPLATE', SEARCH_URL_TEMPLATE)
+            
         except Exception as e:
             print(f"Erro ao carregar settings.json: {e}")
 
@@ -74,15 +86,12 @@ def save_settings(new_data):
     globals()['DELAY_BETWEEN_REQUESTS'] = float(new_data.get('delay', DELAY_BETWEEN_REQUESTS))
     globals()['THEME_MODE'] = new_data.get('theme', THEME_MODE)
     
-    # Processa Termos
     terms_raw = new_data.get('terms', "")
     if isinstance(terms_raw, str):
         globals()['DEFAULT_SEARCH_TERMS'] = [t.strip() for t in terms_raw.split(',') if t.strip()]
 
-    # ADICIONADO: Processa Anos
     years_raw = new_data.get('years', "")
     if isinstance(years_raw, str):
-        # Cria lista de strings, limpando espaços
         globals()['DEFAULT_YEARS'] = [y.strip() for y in years_raw.split(',') if y.strip()]
     
     data_to_save = {
@@ -91,7 +100,8 @@ def save_settings(new_data):
         'DELAY_BETWEEN_REQUESTS': globals()['DELAY_BETWEEN_REQUESTS'],
         'THEME_MODE': globals()['THEME_MODE'],
         'DEFAULT_SEARCH_TERMS': globals()['DEFAULT_SEARCH_TERMS'],
-        'DEFAULT_YEARS': globals()['DEFAULT_YEARS'] # Salva no JSON
+        'DEFAULT_YEARS': globals()['DEFAULT_YEARS'],
+        'SEARCH_URL_TEMPLATE': globals()['SEARCH_URL_TEMPLATE']
     }
     
     try:
@@ -102,9 +112,4 @@ def save_settings(new_data):
         print(f"Erro ao salvar settings: {e}")
         return False
 
-# Carrega ao iniciar o módulo
 load_settings()
-
-
-
-        

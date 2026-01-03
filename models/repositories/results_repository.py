@@ -3,10 +3,22 @@ import sqlite3
 
 class ResultsRepository(BaseRepository):
     def get_all(self):
-        """Retorna todas as pesquisas salvas."""
+        """
+        Retorna todas as pesquisas salvas, incluindo flags indicando 
+        se possuem HTML de busca (PPB) e repositório (PPR) salvos.
+        """
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM pesquisas ORDER BY extracted_at DESC")
+            # MODIFICADO: Left Join para verificar existência de conteúdo HTML
+            cursor.execute("""
+                SELECT p.*,
+                       CASE WHEN b.html_content IS NOT NULL AND b.html_content != '' THEN 1 ELSE 0 END as has_ppb,
+                       CASE WHEN r.html_content IS NOT NULL AND r.html_content != '' THEN 1 ELSE 0 END as has_ppr
+                FROM pesquisas p
+                LEFT JOIN ppb b ON b.pesquisa_id = p.id
+                LEFT JOIN ppr r ON r.pesquisa_id = p.id
+                ORDER BY p.extracted_at DESC
+            """)
             cols = [description[0] for description in cursor.description]
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
@@ -34,50 +46,51 @@ class ResultsRepository(BaseRepository):
                             title, author, ppb_link, ppr_link, 
                             univ_sigla, univ_nome, programa,
                             search_term, search_year
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        title, author, 
-                        item.get('ppb_link'), item.get('ppr_link'), 
-                        item.get('sigla'), item.get('universidade'), item.get('programa'),
+                        title, author, item.get('ppb_link'), item.get('ppr_link'),
+                        '-', 'Pendente', '-', 
                         term, year
                     ))
+                    
+                    # Recupera o ID gerado para criar as entradas vazias nas tabelas filhas (opcional, mas bom para consistência)
+                    pesquisa_id = cursor.lastrowid
+                    
+                    # Cria entradas iniciais (links) nas tabelas de conteúdo
+                    cursor.execute("INSERT OR IGNORE INTO ppb (pesquisa_id, url) VALUES (?, ?)", (pesquisa_id, item.get('ppb_link')))
+                    cursor.execute("INSERT OR IGNORE INTO ppr (pesquisa_id, url) VALUES (?, ?)", (pesquisa_id, item.get('ppr_link')))
+                    
                     saved_count += 1
-                except sqlite3.IntegrityError:
+                except sqlite3.Error:
                     pass
+            
             conn.commit()
             return saved_count
 
-    def save_content(self, url, html_content, type_doc):
-        """Salva HTML de PPB ou PPR."""
-        table = "ppb" if type_doc == 'buscador' else "ppr"
-        link_col = "ppb_link" if type_doc == 'buscador' else "ppr_link"
-        
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(f"SELECT id FROM pesquisas WHERE {link_col} = ?", (url,))
-            res = cursor.fetchone()
-            if res:
-                cursor.execute(f"""
-                    INSERT INTO {table} (pesquisa_id, url, html_content)
-                    VALUES (?, ?, ?)
-                """, (res[0], url, html_content))
-                conn.commit()
-
     def get_pending_ppr(self):
-        """Retorna pesquisas com link PPR mas sem HTML baixado."""
+        """Retorna lista de (pesquisa_id, ppr_link) que AINDA NÃO têm HTML salvo."""
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT p.id, p.ppr_link 
                 FROM pesquisas p
+                LEFT JOIN ppr r ON r.pesquisa_id = p.id
                 WHERE p.ppr_link IS NOT NULL AND p.ppr_link != '' 
-                  AND NOT EXISTS (
-                      SELECT 1 FROM ppr r 
-                      WHERE r.pesquisa_id = p.id AND r.html_content IS NOT NULL
-                  )
+                  AND (r.html_content IS NULL OR r.html_content = '')
             """)
             return cursor.fetchall()
+
+    def save_content(self, url, html, doc_type):
+        """Salva o HTML na tabela correta (ppb ou ppr) baseado na URL."""
+        table = "ppb" if doc_type == 'buscador' else "ppr"
+        with self.db.get_connection() as conn:
+            # Atualiza baseando-se na URL que foi baixada
+            conn.execute(f"""
+                UPDATE {table} 
+                SET html_content = ?, extracted_at = CURRENT_TIMESTAMP
+                WHERE url = ?
+            """, (html, url))
+            conn.commit()
 
     def get_extracted_html(self, title, author, doc_type='ppb'):
         """Recupera o HTML salvo (PPB ou PPR) pelo título e autor."""

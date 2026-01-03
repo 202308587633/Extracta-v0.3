@@ -28,7 +28,6 @@ class ResultsTab(ctk.CTkFrame):
         self.toolbar = ctk.CTkFrame(self, fg_color="transparent")
         self.toolbar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
 
-        # Botão Baixar Pendentes
         self.btn_scrape_pending = ctk.CTkButton(
             self.toolbar, text="⬇️ Baixar HTMLs Pendentes", 
             command=self.viewmodel.scrape_pending_pprs, height=30,
@@ -36,7 +35,6 @@ class ResultsTab(ctk.CTkFrame):
         )
         self.btn_scrape_pending.pack(side="left", padx=(0, 10))
 
-        # Botão Extrair em Lote
         self.btn_extract_batch = ctk.CTkButton(
             self.toolbar, text="🏷️ Extrair Dados Univ. (Lote)", 
             command=self.viewmodel.batch_extract_univ_data, height=30,
@@ -44,16 +42,13 @@ class ResultsTab(ctk.CTkFrame):
         )
         self.btn_extract_batch.pack(side="left", padx=(0, 10))
 
-        # --- NOVO BOTÃO: Parar ---
         self.btn_stop = ctk.CTkButton(
             self.toolbar, text="⏹️ Parar",
-            # Chama diretamente o método do ResultsViewModel
             command=lambda: self.viewmodel.results_vm.stop_process(), 
             height=30, fg_color="#c0392b", hover_color="#e74c3c",
             state="disabled", font=config.FONTS["normal"]
         )
         self.btn_stop.pack(side="left", padx=(0, 10))
-        # -------------------------
 
         self.btn_refresh = ctk.CTkButton(
             self.toolbar, text="🔄 Atualizar",
@@ -66,20 +61,33 @@ class ResultsTab(ctk.CTkFrame):
         self.filter_frame = ctk.CTkFrame(self)
         self.filter_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         
+        # Filtros de Texto
         ctk.CTkLabel(self.filter_frame, text="Título:", font=config.FONTS["small"]).pack(side="left", padx=(10, 2))
-        self.ent_filter_title = ctk.CTkEntry(self.filter_frame, width=200, placeholder_text="Filtrar...")
+        self.ent_filter_title = ctk.CTkEntry(self.filter_frame, width=150, placeholder_text="Filtrar...")
         self.ent_filter_title.pack(side="left", padx=5)
         self.ent_filter_title.bind("<KeyRelease>", self._apply_filters)
 
         ctk.CTkLabel(self.filter_frame, text="Autor:", font=config.FONTS["small"]).pack(side="left", padx=(10, 2))
-        self.ent_filter_author = ctk.CTkEntry(self.filter_frame, width=150, placeholder_text="Filtrar...")
+        self.ent_filter_author = ctk.CTkEntry(self.filter_frame, width=120, placeholder_text="Filtrar...")
         self.ent_filter_author.pack(side="left", padx=5)
         self.ent_filter_author.bind("<KeyRelease>", self._apply_filters)
 
         ctk.CTkLabel(self.filter_frame, text="Univ.:", font=config.FONTS["small"]).pack(side="left", padx=(10, 2))
-        self.ent_filter_univ = ctk.CTkEntry(self.filter_frame, width=100, placeholder_text="Sigla...")
+        self.ent_filter_univ = ctk.CTkEntry(self.filter_frame, width=80, placeholder_text="Sigla...")
         self.ent_filter_univ.pack(side="left", padx=5)
         self.ent_filter_univ.bind("<KeyRelease>", self._apply_filters)
+
+        # Filtro de Status (NOVO)
+        ctk.CTkLabel(self.filter_frame, text="Status HTML:", font=config.FONTS["small"]).pack(side="left", padx=(10, 2))
+        self.cmb_filter_status = ctk.CTkComboBox(
+            self.filter_frame,
+            values=["Todos", "Completo (PPB+PPR)", "Apenas PPB", "Apenas PPR", "Sem HTML"],
+            width=150,
+            command=self._apply_filters,
+            state="readonly"
+        )
+        self.cmb_filter_status.set("Todos")
+        self.cmb_filter_status.pack(side="left", padx=5)
 
         self.label_count = ctk.CTkLabel(self.filter_frame, text="Total: 0", font=config.FONTS["small"])
         self.label_count.pack(side="right", padx=15)
@@ -122,6 +130,12 @@ class ResultsTab(ctk.CTkFrame):
         self.tree.column("universidade", width=200, anchor="w")
         self.tree.column("programa", width=200, anchor="w")
 
+        # Configuração das Cores das Linhas (Tags)
+        self.tree.tag_configure('row_complete', background=config.ROW_COLORS['complete'])
+        self.tree.tag_configure('row_ppb', background=config.ROW_COLORS['ppb_only'])
+        self.tree.tag_configure('row_ppr', background=config.ROW_COLORS['ppr_only'])
+        self.tree.tag_configure('row_empty', background=config.ROW_COLORS['empty'])
+
         self.scrollbar = ctk.CTkScrollbar(self.container, command=self.tree.yview)
         self.tree.configure(yscrollcommand=self.scrollbar.set)
         self.tree.grid(row=0, column=0, sticky="nsew")
@@ -135,9 +149,7 @@ class ResultsTab(ctk.CTkFrame):
         self.all_data = results
         self._apply_filters()
 
-    # --- Controle de Estado dos Botões (Novo) ---
     def set_stop_button_state(self, busy):
-        """Habilita o botão Parar se estiver ocupado, e desabilita os outros."""
         state_stop = "normal" if busy else "disabled"
         state_others = "disabled" if busy else "normal"
         
@@ -150,6 +162,7 @@ class ResultsTab(ctk.CTkFrame):
         f_title = self.ent_filter_title.get().lower().strip()
         f_author = self.ent_filter_author.get().lower().strip()
         f_univ = self.ent_filter_univ.get().lower().strip()
+        f_status = self.cmb_filter_status.get()
 
         for item in self.tree.get_children(): self.tree.delete(item)
         self.link_map.clear()
@@ -157,20 +170,43 @@ class ResultsTab(ctk.CTkFrame):
 
         count = 0
         for idx, item in enumerate(self.all_data):
+            # Filtros de Texto
             title = str(item.get('title', '') or '').lower()
             author = str(item.get('author', '') or '').lower()
             univ = (str(item.get('univ_sigla', '') or '') + str(item.get('univ_nome', '') or '')).lower()
 
-            if (f_title in title) and (f_author in author) and (f_univ in univ):
-                values = (
-                    item.get('title'), item.get('author'), 
-                    item.get('univ_sigla', '-'), item.get('univ_nome', 'Pendente...'),
-                    item.get('programa', '-')
-                )
-                tree_id = self.tree.insert("", "end", values=values)
-                self.link_map[tree_id] = {'search': item.get('ppb_link'), 'repo': item.get('ppr_link')}
-                self.item_map[tree_id] = idx
-                count += 1
+            if not ((f_title in title) and (f_author in author) and (f_univ in univ)):
+                continue
+
+            # Filtro de Status (Cores)
+            has_ppb = item.get('has_ppb', 0) == 1
+            has_ppr = item.get('has_ppr', 0) == 1
+
+            if f_status == "Completo (PPB+PPR)" and not (has_ppb and has_ppr): continue
+            if f_status == "Apenas PPB" and not (has_ppb and not has_ppr): continue
+            if f_status == "Apenas PPR" and not (not has_ppb and has_ppr): continue
+            if f_status == "Sem HTML" and not (not has_ppb and not has_ppr): continue
+
+            # Determina a cor (tag)
+            tags = []
+            if has_ppb and has_ppr: tags.append('row_complete')
+            elif has_ppb: tags.append('row_ppb')
+            elif has_ppr: tags.append('row_ppr')
+            else: tags.append('row_empty')
+
+            values = (
+                item.get('title'), item.get('author'), 
+                item.get('univ_sigla', '-'), item.get('univ_nome', 'Pendente...'),
+                item.get('programa', '-')
+            )
+            
+            # Insere com a tag de cor
+            tree_id = self.tree.insert("", "end", values=values, tags=tags)
+            
+            self.link_map[tree_id] = {'search': item.get('ppb_link'), 'repo': item.get('ppr_link')}
+            self.item_map[tree_id] = idx
+            count += 1
+            
         self.label_count.configure(text=f"Total: {count}")
 
     def _sort_column(self, col, reverse):
