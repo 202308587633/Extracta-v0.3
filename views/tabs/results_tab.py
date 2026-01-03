@@ -159,19 +159,6 @@ class ResultsTab(ctk.CTkFrame):
         self.viewmodel.handle_result_selection(values[0], values[1])
         self.viewmodel.open_ppr_in_browser()
 
-    def _setup_context_menu(self):
-        self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
-        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row)
-        self.context_menu.add_separator()        
-        self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
-        self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
-        self.context_menu.add_command(label="🌐 Abrir PPR no Navegador", command=self._view_ppr_browser)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (via PPR)", command=self._extract_univ_from_selection)
-
     def _show_context_menu(self, event):
         row = self.tree.identify_row(event.y)
         if row:
@@ -339,3 +326,44 @@ class ResultsTab(ctk.CTkFrame):
                 self.btn_force_download.configure(state="disabled")
         except Exception as e:
             print(f"Erro ao atualizar combo de fontes: {e}")
+
+    # ... (métodos anteriores)
+    def _setup_context_menu(self):
+        self.context_menu = tk.Menu(self, tearoff=0)
+        
+        # Seção de Ações de Scraping
+        self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
+        self.context_menu.add_command(label="📂 Scrap do Link do Repositório", command=self._scrape_repo_row)
+        self.context_menu.add_separator()
+        
+        # Seção de Visualização
+        self.context_menu.add_command(label="🔍 Visualizar PPB na Interface", command=self._view_ppb_internal)
+        self.context_menu.add_command(label="🌐 Abrir PPB no Navegador", command=self._view_ppb_browser)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
+        self.context_menu.add_command(label="🌐 Abrir PPR no Navegador", command=self._view_ppr_browser)
+        self.context_menu.add_separator()
+        
+        # Seção de Extração
+        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (via PPR)", command=self._extract_univ_from_selection)
+        self.context_menu.add_separator()
+
+        # --- NOVAS OPÇÕES DE APAGAR ---
+        self.context_menu.add_command(label="🗑️ Apagar HTML Busca (PPB)", command=self._delete_ppb_html)
+        self.context_menu.add_command(label="🗑️ Apagar HTML Repositório (PPR)", command=self._delete_ppr_html)
+
+    # --- Novos Callbacks ---
+
+    def _delete_ppb_html(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        # values[0] = title, values[1] = author
+        self.viewmodel.results_vm.delete_stored_html(values[0], values[1], 'ppb')
+
+    def _delete_ppr_html(self):
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        # values[0] = title, values[1] = author
+        self.viewmodel.results_vm.delete_stored_html(values[0], values[1], 'ppr')

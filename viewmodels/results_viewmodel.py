@@ -195,3 +195,18 @@ class ResultsViewModel(BaseViewModel):
         self._log(f"Iniciando reanálise de {len(records)} repositórios...", "yellow")
         self._toggle_ui(busy=True)
         threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
+        
+    # Adicione na classe ResultsViewModel
+
+    def delete_stored_html(self, title, author, target_type):
+        """Remove o HTML armazenado (PPB ou PPR) para permitir novo download."""
+        label = "Busca (PPB)" if target_type == 'ppb' else "Repositório (PPR)"
+        
+        if self.repo.clear_html_content(title, author, target_type):
+            self._log(f"HTML de {label} apagado para: {title[:30]}...", "yellow")
+            # Recarrega a tabela para atualizar as cores (status)
+            self.load_results()
+        else:
+            self._log(f"Erro ao apagar HTML de {label}.", "red")
+            
+    

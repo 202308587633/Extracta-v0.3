@@ -149,3 +149,22 @@ class ResultsRepository(BaseRepository):
         except Exception as e:
             print(f"Erro ao buscar registros para reprocessamento: {e}")
             return []
+        
+    def clear_html_content(self, title, author, target_type):
+        """
+        Define como NULL o conteúdo HTML de um registro.
+        target_type: 'ppb' ou 'ppr'
+        """
+        column = "ppb_html" if target_type == 'ppb' else "ppr_html"
+        try:
+            with self.db.get_connection() as conn:
+                conn.execute(f"""
+                    UPDATE results 
+                    SET {column} = NULL 
+                    WHERE title = ? AND author = ?
+                """, (title, author))
+                conn.commit()
+            return True
+        except Exception as e:
+            print(f"Erro ao limpar HTML ({target_type}): {e}")
+            return False
