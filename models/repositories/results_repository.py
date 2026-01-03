@@ -94,7 +94,6 @@ class ResultsRepository(BaseRepository):
             res = cursor.fetchone()
             return res[0] if res else None
 
-    # --- NOVO MÉTODO PARA CORREÇÃO DO PARSER ---
     def get_ppr_data(self, title, author):
         """Retorna (url, html) do PPR para extração correta baseada no domínio."""
         with self.db.get_connection() as conn:
@@ -127,7 +126,6 @@ class ResultsRepository(BaseRepository):
             """, (sigla, nome, programa, title, author))
             conn.commit()
             
-    # Adicione este método na classe ResultsRepository
     def get_ppr_for_reprocessing(self):
         """
         Busca registros que têm HTML (PPR) mas a sigla ainda não foi 
@@ -136,14 +134,12 @@ class ResultsRepository(BaseRepository):
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
-                # Ajuste os nomes das colunas (title, author, ppr_link, etc) 
-                # conforme a estrutura real da sua tabela 'results'
                 cursor.execute("""
                     SELECT p.title, p.author, p.ppr_link, r.html_content 
                     FROM ppr r
                     JOIN pesquisas p ON r.pesquisa_id = p.id
                     WHERE r.html_content IS NOT NULL AND r.html_content != ''
-                    AND (univ_sigla = '-' OR univ_sigla = 'DSpace' OR univ_sigla IS NULL)
+                    AND (p.univ_sigla = '-' OR p.univ_sigla = 'DSpace' OR p.univ_sigla IS NULL)
                 """)
                 return cursor.fetchall()
         except Exception as e:
@@ -155,16 +151,23 @@ class ResultsRepository(BaseRepository):
         Define como NULL o conteúdo HTML de um registro.
         target_type: 'ppb' ou 'ppr'
         """
-        column = "ppb_html" if target_type == 'ppb' else "ppr_html"
+        # Seleciona a tabela alvo correta (ppb ou ppr)
+        table = "ppb" if target_type == 'ppb' else "ppr"
+        
         try:
             with self.db.get_connection() as conn:
-                conn.execute(f"""
-                    UPDATE results 
-                    SET {column} = NULL 
-                    WHERE title = ? AND author = ?
-                """, (title, author))
-                conn.commit()
-            return True
+                # 1. Encontra o ID da pesquisa
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM pesquisas WHERE title = ? AND author = ?", (title, author))
+                row = cursor.fetchone()
+                
+                if row:
+                    pesquisa_id = row[0]
+                    # 2. Atualiza a tabela satélite correspondente usando o ID encontrado
+                    conn.execute(f"UPDATE {table} SET html_content = NULL WHERE pesquisa_id = ?", (pesquisa_id,))
+                    conn.commit()
+                    return True
+                return False
         except Exception as e:
             print(f"Erro ao limpar HTML ({target_type}): {e}")
             return False
