@@ -119,24 +119,6 @@ class ResultsViewModel(BaseViewModel):
         self.load_results()
         self._log("Processo finalizado. Aguardando novos comandos.", "white")
 
-    # --- Extração Universitária (Parser) ---
-
-    def batch_extract_univ_data(self):
-        self._log("Verificando registros para extração...", "yellow")
-        try:
-            records = self.repo.get_all_ppr_with_html()
-        except Exception as e:
-            self._log(f"Erro ao ler banco de dados: {e}", "red")
-            return
-
-        if not records:
-            self._log("Abortado: Nenhum HTML de repositório (PPR) encontrado no banco.", "red")
-            return
-        
-        self._log(f"Iniciando análise de {len(records)} repositórios...", "yellow")
-        self._toggle_ui(busy=True)
-        threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
-
     def extract_single_data(self, title, author):
         ppr_data = self.repo.get_ppr_data(title, author)
         
@@ -192,3 +174,24 @@ class ResultsViewModel(BaseViewModel):
         # CORREÇÃO: O nome correto do atributo na classe base é self.sys_repo
         return self.sys_repo.get_disabled_sources()
     
+    
+    #########################
+    
+    # ... dentro de ResultsViewModel ...
+
+    def batch_extract_univ_data(self):
+        self._log("Buscando registros não identificados ('-' ou 'DSpace')...", "yellow")
+        try:
+            # ALTERAÇÃO AQUI: Chama o novo método filtro
+            records = self.repo.get_ppr_for_reprocessing()
+        except Exception as e:
+            self._log(f"Erro ao ler banco de dados: {e}", "red")
+            return
+
+        if not records:
+            self._log("Nenhum registro com sigla '-' ou 'DSpace' encontrado para processar.", "green")
+            return
+        
+        self._log(f"Iniciando reanálise de {len(records)} repositórios...", "yellow")
+        self._toggle_ui(busy=True)
+        threading.Thread(target=self._run_univ_extraction, args=(records,)).start()

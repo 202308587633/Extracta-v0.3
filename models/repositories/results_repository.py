@@ -126,3 +126,26 @@ class ResultsRepository(BaseRepository):
                 WHERE title = ? AND author = ?
             """, (sigla, nome, programa, title, author))
             conn.commit()
+            
+    # Adicione este método na classe ResultsRepository
+    def get_ppr_for_reprocessing(self):
+        """
+        Busca registros que têm HTML (PPR) mas a sigla ainda não foi 
+        identificada corretamente ('-' ou 'DSpace').
+        """
+        try:
+            with self.db.get_connection() as conn:
+                cursor = conn.cursor()
+                # Ajuste os nomes das colunas (title, author, ppr_link, etc) 
+                # conforme a estrutura real da sua tabela 'results'
+                cursor.execute("""
+                    SELECT p.title, p.author, p.ppr_link, r.html_content 
+                    FROM ppr r
+                    JOIN pesquisas p ON r.pesquisa_id = p.id
+                    WHERE r.html_content IS NOT NULL AND r.html_content != ''
+                    AND (univ_sigla = '-' OR univ_sigla = 'DSpace' OR univ_sigla IS NULL)
+                """)
+                return cursor.fetchall()
+        except Exception as e:
+            print(f"Erro ao buscar registros para reprocessamento: {e}")
+            return []

@@ -20,6 +20,7 @@ from parsers.ufmt_parser import UfmtParser
 from parsers.unifor_parser import UniforParser
 from parsers.unisinos_parser import UnisinosParser
 from parsers.ufop_parser import UfopParser
+from parsers.uff_parser import UFFParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
@@ -31,6 +32,8 @@ class ParserFactory:
         self.config_map = self._load_config(config_path)
         
         self._custom_map = {
+            'app.uff.br': UFFParser,
+            '.uff.br': UFFParser,
             'repositorio.ufop.br': UfopParser, 
             '.ufop.br': UfopParser,
             'repositorio.jesuita.org.br': UnisinosParser, 
