@@ -1,10 +1,8 @@
 import threading
-import time
-from viewmodels.base_viewmodel import BaseViewModel 
+from viewmodels.base_viewmodel import BaseViewModel
 
 class HomeViewModel(BaseViewModel):
     def __init__(self, history_repo, system_repo, scraper, view):
-        # Passamos 'view' para o BaseViewModel habilitar o log na tela
         super().__init__(system_repo, view)
         self.history_repo = history_repo
         self.scraper = scraper
@@ -16,6 +14,12 @@ class HomeViewModel(BaseViewModel):
             return
         
         term, year = self.view.get_current_selection()
+        
+        # Validação extra
+        if not term or not year:
+            self._log("Selecione um termo e um ano válidos.", "yellow")
+            return
+
         self._log(f"Iniciando processo para: {term} ({year})", "yellow")
         
         self.view.set_button_state(False)
@@ -38,9 +42,16 @@ class HomeViewModel(BaseViewModel):
             
             self._log("✅ Pesquisa inicial capturada com sucesso!", "green")
             
-            # Atualiza lista de histórico
+            # 1. Atualiza lista de histórico (Tabela)
             if hasattr(self.view, 'refresh_history_callback'):
                 self.view.after_thread_safe(self.view.refresh_history_callback)
+
+            # 2. CORREÇÃO: Atualiza os filtros da Home (Remove o ano pesquisado da lista)
+            if hasattr(self.view, 'filter_home_options'):
+                # Busca a lista atualizada do banco
+                existing = self.history_repo.get_existing_searches()
+                # Atualiza a UI na thread principal
+                self.view.after_thread_safe(lambda: self.view.filter_home_options(existing))
 
         except Exception as e:
             self._update_source_status(url, False)

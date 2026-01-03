@@ -3,16 +3,17 @@ import sqlite3
 
 class HistoryRepository(BaseRepository):
     def get_all(self):
-        """Retorna histórico para a tabela."""
+        """Retorna histórico completo para a tabela."""
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             try:
+                # Tenta buscar com as colunas novas
                 cursor.execute("""
                     SELECT id, url, created_at, search_term, search_year 
                     FROM plb ORDER BY created_at DESC
                 """)
             except sqlite3.OperationalError:
-                # Fallback para compatibilidade
+                # Fallback se a migração ainda não rodou (segurança)
                 cursor.execute("SELECT id, url, created_at, NULL, NULL FROM plb ORDER BY created_at DESC")
             return cursor.fetchall()
 
@@ -52,6 +53,10 @@ class HistoryRepository(BaseRepository):
             return False
 
     def get_existing_searches(self):
+        """
+        Retorna lista única de (termo, ano) já pesquisados.
+        Usado para bloquear opções na HomeTab.
+        """
         try:
             with self.db.get_connection() as conn:
                 cursor = conn.cursor()
@@ -59,6 +64,7 @@ class HistoryRepository(BaseRepository):
                     SELECT DISTINCT search_term, search_year 
                     FROM plb 
                     WHERE search_term IS NOT NULL AND search_term != ''
+                      AND search_year IS NOT NULL AND search_year != ''
                 """)
                 return cursor.fetchall()
         except sqlite3.Error:
