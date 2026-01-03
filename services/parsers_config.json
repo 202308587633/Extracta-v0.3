@@ -1,22 +1,62 @@
 {
-  "mappings": [
-    { "key": "repositorio.ufba.br", "sigla": "UFBA", "name": "Universidade Federal da Bahia", "type": "jspui" },
-    { "key": ".ufba.br", "sigla": "UFBA", "name": "Universidade Federal da Bahia", "type": "jspui" },
-    { "key": "repositorio.ufc.br", "sigla": "UFC", "name": "Universidade Federal do Ceará", "type": "jspui" },
-    { "key": ".ufc.br", "sigla": "UFC", "name": "Universidade Federal do Ceará", "type": "jspui" },
-    { "key": "repositorio.ufma.br", "sigla": "UFMA", "name": "Universidade Federal do Maranhão", "type": "jspui" },
-    { "key": ".ufma.br", "sigla": "UFMA", "name": "Universidade Federal do Maranhão", "type": "jspui" },
-    { "key": "repositorio.ufsc.br", "sigla": "UFSC", "name": "Universidade Federal de Santa Catarina", "type": "jspui" },
-    { "key": ".ufsc.br", "sigla": "UFSC", "name": "Universidade Federal de Santa Catarina", "type": "jspui" },
-    { "key": "repositorio.ufpe.br", "sigla": "UFPE", "name": "Universidade Federal de Pernambuco", "type": "jspui" },
-    { "key": ".ufpe.br", "sigla": "UFPE", "name": "Universidade Federal de Pernambuco", "type": "jspui" },
-    { "key": "repositorio.unb.br", "sigla": "UnB", "name": "Universidade de Brasília", "type": "jspui" },
-    { "key": "repositorio.ufmg.br", "sigla": "UFMG", "name": "Universidade Federal de Minas Gerais", "type": "jspui" },
-    { "key": "ri.ufs.br", "sigla": "UFS", "name": "Universidade Federal de Sergipe", "type": "jspui" },
-    { "key": ".ufs.br", "sigla": "UFS", "name": "Universidade Federal de Sergipe", "type": "jspui" },
-    { "key": "lume.ufrgs.br", "sigla": "UFRGS", "name": "Universidade Federal do Rio Grande do Sul", "type": "jspui" },
-    { "key": "hdl.handle.net/10183", "sigla": "UFRGS", "name": "Universidade Federal do Rio Grande do Sul", "type": "jspui" },
-    { "key": "tede2.uepg.br", "sigla": "UEPG", "name": "Universidade Estadual de Ponta Grossa", "type": "jspui" },
-    { "key": ".uepg.br", "sigla": "UEPG", "name": "Universidade Estadual de Ponta Grossa", "type": "jspui" }
-  ]
+  "mappings": {
+    "repositorio.ufop.br": "UfopParser",
+    ".ufop.br": "UfopParser",
+    
+    "app.uff.br": "UffParser",
+    ".uff.br": "UffParser",
+    
+    "repositorio.fei.edu.br": "FeiParser",
+    ".fei.edu.br": "FeiParser",
+    
+    "repositorio.ufrn.br": "UfrnParser",
+    ".ufrn.br": "UfrnParser",
+    
+    "repositorio.cefetmg.br": "CefetMgParser",
+    ".cefetmg.br": "CefetMgParser",
+    
+    "repositorio.upf.br": "UpfParser",
+    ".upf.br": "UpfParser",
+    
+    "repositorio.udesc.br": "UdescParser",
+    "repositorio-api.udesc.br": "UdescParser",
+    ".udesc.br": "UdescParser",
+    
+    "siduece.uece.br": "SidUeceParser",
+    ".uece.br": "SidUeceParser",
+    
+    "repositorio.utfpr.edu.br": "UtfprParser",
+    ".utfpr.edu.br": "UtfprParser",
+    
+    "tede.fecap.br": "FecapParser",
+    ".fecap.br": "FecapParser",
+    
+    "sucupira.capes.gov.br": "SucupiraParser",
+    "plataformasucupira.capes.gov.br": "SucupiraParser",
+
+    "repositorio.uniceub.br": "UniceubParser",
+    ".uniceub.br": "UniceubParser",
+    
+    "dspace.unisa.br": "UnisaParser",
+    ".unisa.br": "UnisaParser",
+
+    ".ufpa.br": "UFPAParser",
+    "repositorio.ufpa.br": "UFPAParser",
+
+    ".unicap.br": "UnicapParser",
+    "tede2.unicap.br": "UnicapParser",
+
+    ".uepg.br": "UEPGParser",
+    "tede2.uepg.br": "UEPGParser",
+
+    ".ucs.br": "UcsParser",
+    ".usp.br": "USPParser",
+    ".ufmt.br": "UfmtParser",
+    
+    "biblioteca.sophia.com.br": "UniforParser", 
+    "uol.unifor.br": "UniforParser",
+
+    "repositorio.jesuita.org.br": "UnisinosParser", 
+    ".unisinos.br": "UnisinosParser"
+  }
 }

@@ -28,93 +28,105 @@ from parsers.upf_parser import UpfParser
 from parsers.sucupira_parser import SucupiraParser
 from parsers.udesc_parser import UdescParser
 from parsers.siduece_parser import SidUeceParser
+from parsers.fecap_parser import FecapParser
+from parsers.utfpr_parser import UTFPRParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
         self._default = GenericParser()
+        self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), config_filename)
         
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(base_dir, config_filename)
-        
-        self.config_map = self._load_config(config_path)
-        
-        self._custom_map = {
-            'siduece.uece.br': SidUeceParser,
-            '.uece.br': SidUeceParser,
-            'repositorio.udesc.br': UdescParser,
-            'repositorio-api.udesc.br': UdescParser,
-            '.udesc.br': UdescParser,
-            'sucupira.capes.gov.br': SucupiraParser,
-            'plataformasucupira.capes.gov.br': SucupiraParser,
-            'repositorio.upf.br': UpfParser,
-            '.upf.br': UpfParser,
-            'repositorio.cefetmg.br': CefetMgParser,
-            '.cefetmg.br': CefetMgParser,
-            'repositorio.ufrn.br': UfrnParser,
-            '.ufrn.br': UfrnParser,
-            'repositorio.fei.edu.br': FeiParser,
-            '.fei.edu.br': FeiParser,
-            'app.uff.br': UFFParser,
-            '.uff.br': UFFParser,
-            'repositorio.ufop.br': UfopParser, 
-            '.ufop.br': UfopParser,
-            'repositorio.jesuita.org.br': UnisinosParser, 
-            '.unisinos.br': UnisinosParser,
-            'biblioteca.sophia.com.br': UniforParser, 
-            'uol.unifor.br': UniforParser,
-            '.ufmt.br': UfmtParser,
-            '.usp.br': USPParser,
-            '.ucs.br': UcsParser,
-            '.uepg.br': UEPGParser,
-            'tede2.uepg.br': UEPGParser,
-            '.unicap.br': UnicapParser,
-            'tede2.unicap.br': UnicapParser,
-            '.ufpa.br': UFPAParser,
-            'repositorio.ufpa.br': UFPAParser,
-            'dspace.unisa.br': UnisaParser,
-            '.unisa.br': UnisaParser,
-            'repositorio.uniceub.br': UniceubParser, # <--- [2] REGISTRO
-            '.uniceub.br': UniceubParser             # <--- [2] REGISTRO
+        # Mapa de classes disponíveis (String -> Classe Real)
+        # Isso permite instanciar a classe baseada no nome que está no JSON
+        self.available_parsers = {
+            'VufindParser': VufindParser,
+            'BDTDParser': BDTDParser,
+            'DSpaceJSPUIParser': DSpaceJSPUIParser,
+            'DSpaceAngularParser': DSpaceAngularParser,
+            'USPParser': USPParser,
+            'UcsParser': UcsParser,
+            'UEPGParser': UEPGParser,
+            'UnicapParser': UnicapParser,
+            'UFPAParser': UFPAParser,
+            'UnisaParser': UnisaParser,
+            'UniceubParser': UniceubParser,
+            'UfmtParser': UfmtParser,
+            'UniforParser': UniforParser,
+            'UnisinosParser': UnisinosParser,
+            'UfopParser': UfopParser,
+            'UFFParser': UFFParser,
+            'FeiParser': FeiParser,
+            'UfrnParser': UfrnParser,
+            'CefetMgParser': CefetMgParser,
+            'UpfParser': UpfParser,
+            'SucupiraParser': SucupiraParser,
+            'UdescParser': UdescParser,
+            'SidUeceParser': SidUeceParser,
+            'FecapParser': FecapParser,
+            'UtfprParser': UTFPRParser
         }
 
-    def _load_config(self, path):
-        if not os.path.exists(path): return []
+        # Carrega o mapeamento do JSON
+        self.domain_map = self._load_config()
+
+    def _load_config(self):
+        """Lê o arquivo JSON e retorna o dicionário de mapeamentos."""
+        if not os.path.exists(self.config_file):
+            print(f"Aviso: Arquivo de configuração '{self.config_file}' não encontrado.")
+            return {}
+            
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(self.config_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                return data.get("mappings", [])
-        except: return []
+                return data.get("mappings", {})
+        except Exception as e:
+            print(f"Erro ao ler configuração de parsers: {e}")
+            return {}
 
     def get_parser(self, url, html_content=None):
         if not url: return self._default
-        url_lower = url.lower()
         
-        # 1. Customizados (Prioridade Alta)
-        for domain, parser_cls in self._custom_map.items():
-            if domain in url_lower: return parser_cls()
+        from urllib.parse import urlparse
+        domain = urlparse(url).netloc.lower()
+        
+        # 1. Tenta encontrar o parser pelo domínio no JSON
+        parser_class_name = None
+        
+        # Busca exata
+        if domain in self.domain_map:
+            parser_class_name = self.domain_map[domain]
+        else:
+            # Busca por sufixo (ex: .ufrn.br)
+            for key_domain, p_name in self.domain_map.items():
+                if key_domain.startswith('.'):
+                    if domain.endswith(key_domain):
+                        parser_class_name = p_name
+                        break
+                elif key_domain in domain: # Fallback para substrings
+                     parser_class_name = p_name
+                     break
+        
+        # Se encontrou no JSON e a classe existe, instancia
+        if parser_class_name and parser_class_name in self.available_parsers:
+            return self.available_parsers[parser_class_name]()
 
-        # 2. Config JSON
-        for entry in self.config_map:
-            if entry['key'] in url_lower:
-                if entry.get('type') == 'angular':
-                    return DSpaceAngularParser(sigla=entry.get('sigla'), universidade=entry.get('name'))
-                return DSpaceJSPUIParser(sigla=entry.get('sigla'), universidade=entry.get('name'))
-
-        # 3. Detecção Genérica
+        # 2. Detecção Genérica (Fallback se não estiver no JSON)
         if html_content:
             from bs4 import BeautifulSoup
             soup = BeautifulSoup(html_content, 'html.parser')
             html_lower = html_content.lower()
 
-            if "vufind" in html_lower or "bdtd.ibict.br" in url_lower:
-                if "search/results" in url_lower or soup.select('.result'):
+            if "vufind" in html_lower or "bdtd.ibict.br" in domain:
+                if "search/results" in url.lower() or soup.select('.result'):
                     return VufindParser()
                 else:
                     return BDTDParser() 
 
-            if soup.find('ds-app') or soup.find('ds-root'):
+            # DSpace 7/Angular
+            if soup.find('ds-app') or soup.find('ds-root') or "dspace-angular" in html_lower:
                 return DSpaceAngularParser(sigla="DSpace7", universidade="Não identificada")
 
+            # DSpace JSPUI / XMLUI genérico
             if (soup.find('div', id='ds-main') or 
                 len(soup.find_all('meta', attrs={'name': lambda x: x and x.startswith('DC.')})) > 3):
                 return DSpaceJSPUIParser(sigla="DSpace", universidade="Não identificada")
