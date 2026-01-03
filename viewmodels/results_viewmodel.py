@@ -15,11 +15,11 @@ class ResultsViewModel(BaseViewModel):
         self._log("Recarregando tabela de resultados...", "white")
         data = self.repo.get_all()
         self.view.after_thread_safe(lambda: self.view.results_tab.display_results(data))
+        self._log("Tabela atualizada.", "white")
 
     # --- Controle de Processo ---
     
     def stop_process(self):
-        """Chamado pelo botão Parar."""
         self._stop_flag = True
         self._log("🛑 Solicitado parada do processo...", "yellow")
 
@@ -76,22 +76,20 @@ class ResultsViewModel(BaseViewModel):
                 html = self.scraper.fetch_html(url)
                 if html:
                     self.repo.save_content(url, html, 'repositorio')
-                    self._update_source_status(url, True) # Sucesso
+                    self._update_source_status(url, True)
                     count += 1
                 else:
-                    self._update_source_status(url, False) # Falha (Vazio)
+                    self._update_source_status(url, False)
                     self._log(f"Falha (Vazio): {url}", "red")
 
                 time.sleep(1.0)
             except Exception as e:
-                self._update_source_status(url, False) # Erro
+                self._update_source_status(url, False)
                 self._log(f"Erro ao baixar {url}: {e}", "red")
         
         self._toggle_ui(busy=False)
         self._log(f"Lote concluído: {count} salvos.", "green")
         self.load_results()
-        
-        # --- CORREÇÃO: Mensagem final para atualizar o status ---
         self._log("Processo finalizado. Aguardando novos comandos.", "white")
 
     # --- Extração Universitária (Parser) ---
@@ -106,7 +104,6 @@ class ResultsViewModel(BaseViewModel):
 
         if not records:
             self._log("Abortado: Nenhum HTML de repositório (PPR) encontrado no banco.", "red")
-            self._log("Dica: Use o botão 'Baixar HTMLs Pendentes' primeiro.", "white")
             return
         
         self._log(f"Iniciando análise de {len(records)} repositórios...", "yellow")
@@ -114,12 +111,19 @@ class ResultsViewModel(BaseViewModel):
         threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
 
     def extract_single_data(self, title, author):
-        html = self.repo.get_extracted_html(title, author, 'ppr')
-        if not html:
+        # CORREÇÃO: Busca (URL, HTML) para garantir escolha correta do parser
+        ppr_data = self.repo.get_ppr_data(title, author)
+        
+        if not ppr_data or not ppr_data[1]:
             self._log("HTML do Repositório (PPR) não encontrado. Faça o download primeiro.", "red")
             return
         
-        records = [(title, author, "", html)]
+        url, html = ppr_data
+        
+        # Cria lista compatível com _run_univ_extraction: [(title, author, url, html)]
+        records = [(title, author, url, html)]
+        
+        self._log(f"Extraindo dados individuais (URL: {url})...", "yellow")
         threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
 
     def _run_univ_extraction(self, records):
@@ -127,10 +131,6 @@ class ResultsViewModel(BaseViewModel):
         try:
             from services.parser_factory import ParserFactory
             factory = ParserFactory()
-        except ImportError as e:
-            self._log(f"Erro Crítico: Não foi possível importar ParserFactory. {e}", "red")
-            self._toggle_ui(busy=False)
-            return
         except Exception as e:
             self._log(f"Erro ao inicializar fábrica de parsers: {e}", "red")
             self._toggle_ui(busy=False)
@@ -140,31 +140,23 @@ class ResultsViewModel(BaseViewModel):
         total = len(records)
         
         for idx, (title, author, url, html) in enumerate(records):
-            if self._stop_flag:
-                self._log("Extração interrompida pelo usuário.", "red")
-                break
+            if self._stop_flag: break
 
             try:
                 parser = factory.get_parser(url, html_content=html)
                 if parser:
                     data = parser.extract(html, url)
-                    if data:
-                        if data.get('sigla') or data.get('programa'):
-                            self.repo.update_univ_data(title, author, 
-                                                    data.get('sigla'), 
-                                                    data.get('universidade'), 
-                                                    data.get('programa'))
-                            count_success += 1
-                
-                if idx > 0 and idx % 5 == 0:
-                    self._log(f"Analisando item {idx}/{total}...", "white")
-                    
+                    if data and (data.get('sigla') or data.get('programa')):
+                        self.repo.update_univ_data(title, author, 
+                                                data.get('sigla'), 
+                                                data.get('universidade'), 
+                                                data.get('programa'))
+                        count_success += 1
+                        self._log(f"Sucesso: {data.get('sigla')} - {data.get('programa')}", "green")
             except Exception as e:
                 print(f"Erro no registro {idx}: {e}")
 
         self._toggle_ui(busy=False)
         self._log(f"Extração finalizada. {count_success} registros atualizados.", "green")
         self.load_results()
-        
-        # --- CORREÇÃO: Mensagem final para atualizar o status ---
         self._log("Processo finalizado. Aguardando novos comandos.", "white")

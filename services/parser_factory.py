@@ -8,7 +8,9 @@ from parsers.bdtd_parser import BDTDParser
 # Importe APENAS os parsers que possuem lógica customizada complexa
 from parsers.usp_parser import USPParser
 from parsers.ucs_parser import UcsParser 
-from parsers.uepg_parser import UEPGParser  # <--- [1] IMPORTAÇÃO ADICIONADA
+from parsers.uepg_parser import UEPGParser
+from parsers.unicap_parser import UnicapParser
+from parsers.ufpa_parser import UFPAParser # <--- [1] IMPORTAÇÃO
 try:
     from models.parsers.vufind_parser import VufindParser
 except ImportError:
@@ -26,8 +28,12 @@ class ParserFactory:
         self._custom_map = {
             '.usp.br': USPParser,
             '.ucs.br': UcsParser,
-            '.uepg.br': UEPGParser,        # <--- [2] REGISTRO ADICIONADO
-            'tede2.uepg.br': UEPGParser,   # <--- [2] REGISTRO ADICIONADO
+            '.uepg.br': UEPGParser,
+            'tede2.uepg.br': UEPGParser,
+            '.unicap.br': UnicapParser,
+            'tede2.unicap.br': UnicapParser,
+            '.ufpa.br': UFPAParser,        # <--- [2] REGISTRO
+            'repositorio.ufpa.br': UFPAParser # <--- [2] REGISTRO
         }
 
     def _load_config(self, path):

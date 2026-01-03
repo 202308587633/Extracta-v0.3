@@ -1,17 +1,17 @@
+import json
 import re
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin
 from parsers.base_parser import BaseParser
+from urllib.parse import urljoin
 
 class UFPAParser(BaseParser):
     def __init__(self):
         super().__init__(sigla="UFPA", universidade="Universidade Federal do Pará")
 
+    def extract(self, html_content, base_url, on_progress=None):
+        return self.extract_pure_soup(html_content, base_url, on_progress)
+
     def extract_pure_soup(self, html_content, url, on_progress=None):
-        """
-        Extrai dados do repositório da UFPA (DSpace 7+).
-        Busca o programa no campo de metadado específico ou breadcrumbs, e o PDF via meta tags.
-        """
         soup = BeautifulSoup(html_content, 'html.parser')
         
         data = {
@@ -21,80 +21,97 @@ class UFPAParser(BaseParser):
             'link_pdf': '-'
         }
 
-        if on_progress: on_progress("UFPA: Analisando estrutura da página...")
+        if on_progress: on_progress("UFPA (DSpace 7): Analisando...")
 
-        # --- 1. EXTRAÇÃO DO PROGRAMA ---
+        # --- 1. Tentativa via JSON State (Mais confiável) ---
+        found_in_json = False
         try:
-            found_program = None
-            
-            # Estratégia 1: Busca pelo campo de metadado "Programa" (Específico do layout da UFPA)
-            # <h2 class="simple-view-element-header">Programa</h2>
-            headers = soup.find_all('h2', class_='simple-view-element-header')
-            
-            for header in headers:
-                if "Programa" in header.get_text(strip=True):
-                    # O valor está na div irmã (body) logo após o header
-                    body = header.find_next_sibling('div', class_='simple-view-element-body')
-                    if body:
-                        text = body.get_text(strip=True)
-                        found_program = text
-                        break
-            
-            # Estratégia 2: Breadcrumbs (Fallback)
-            if not found_program:
-                crumbs = soup.select('ol.breadcrumb li a')
-                for crumb in crumbs:
-                    text = crumb.get_text(strip=True)
-                    if "Programa de Pós-Graduação" in text:
-                        found_program = text
-                        break
-
-            # Limpeza do nome do programa
-            if found_program:
-                # Remove "Programa de Pós-Graduação em/no/na"
-                clean_name = re.sub(
-                    r'.*Programa de Pós-Graduação\s*(em|no|na)?\s*', 
-                    '', 
-                    found_program, 
-                    flags=re.IGNORECASE
-                )
-                
-                # Remove sufixos como "- PPGEDAM/NUMA" se houver hífen
-                if ' - ' in clean_name:
-                    clean_name = clean_name.split(' - ')[0]
-
-                data['programa'] = clean_name.strip()
-                if on_progress: on_progress(f"UFPA: Programa identificado: {data['programa']}")
-
+            json_data = self._extract_from_json_state(soup)
+            if json_data:
+                data.update(json_data)
+                found_in_json = True
+                if on_progress: on_progress("Dados extraídos do estado da aplicação.")
         except Exception as e:
-            if on_progress: on_progress(f"UFPA: Erro ao extrair programa: {str(e)[:20]}")
+            print(f"Erro no JSON parse da UFPA: {e}")
 
-        # --- 2. EXTRAÇÃO DO PDF ---
-        try:
-            if on_progress: on_progress("UFPA: Buscando arquivo PDF...")
-            
-            pdf_url = None
-            
-            # Estratégia A: Meta Tag citation_pdf_url (Padrão e presente no HTML da UFPA)
-            pdf_meta = soup.find('meta', attrs={'name': 'citation_pdf_url'})
-            if pdf_meta:
-                pdf_url = pdf_meta.get('content')
-            
-            # Estratégia B: Link direto na lista de arquivos (Layout Angular)
-            if not pdf_url:
-                # Procura links que contenham '/bitstreams/' e '/download'
-                link_tag = soup.find('a', href=lambda h: h and '/bitstreams/' in h and '/download' in h)
-                if link_tag:
-                    pdf_url = link_tag['href']
+        # --- 2. Tentativa Visual (Fallback se JSON falhar) ---
+        if not found_in_json or data['programa'] == '-':
+            visual_prog = self._extract_program_visual(soup)
+            if visual_prog:
+                data['programa'] = self._clean_program(visual_prog)
+                if on_progress: on_progress("Dados extraídos via HTML visual.")
 
-            if pdf_url:
-                # Garante URL absoluta
-                data['link_pdf'] = urljoin(url, pdf_url)
-                if on_progress: on_progress("UFPA: PDF localizado.")
-            else:
-                if on_progress: on_progress("UFPA: PDF não encontrado diretamente.")
-
-        except Exception as e:
-            if on_progress: on_progress(f"UFPA: Erro PDF: {str(e)[:20]}")
+        # --- 3. Extração de PDF ---
+        data['link_pdf'] = self._find_pdf(soup, url)
 
         return data
+
+    def _extract_from_json_state(self, soup):
+        script_tag = soup.find('script', id='dspace-angular-state')
+        if not script_tag or not script_tag.string:
+            return None
+
+        # CORREÇÃO CRÍTICA: O DSpace da UFPA usa '&q;' no lugar de aspas duplas '"'
+        raw_json = script_tag.string.replace('&q;', '"')
+        
+        try:
+            state = json.loads(raw_json)
+            # Caminho: NGRX_STATE -> core -> cache/object
+            cache = state.get('NGRX_STATE', {}).get('core', {}).get('cache/object', {})
+            
+            for key, entry in cache.items():
+                obj_data = entry.get('data', {})
+                # Procura objeto do tipo 'item' que tenha metadados
+                if obj_data.get('type') == 'item' and 'metadata' in obj_data:
+                    metadata = obj_data['metadata']
+                    
+                    return {
+                        'sigla': self._get_json_meta(metadata, 'dc.publisher.initials') or "UFPA",
+                        'programa': self._clean_program(self._get_json_meta(metadata, 'dc.publisher.program')),
+                        'universidade': self._get_json_meta(metadata, 'dc.publisher') or self.universidade
+                    }
+        except json.JSONDecodeError:
+            return None
+        
+        return None
+
+    def _get_json_meta(self, metadata, key):
+        items = metadata.get(key, [])
+        if items and len(items) > 0:
+            return items[0].get('value')
+        return None
+
+    def _extract_program_visual(self, soup):
+        """Busca visual (HTML) caso o JSON falhe."""
+        # Procura headers h2 com texto "Programa"
+        headers = soup.find_all('h2', string=re.compile(r'Programa', re.IGNORECASE))
+        for h2 in headers:
+            # O valor costuma estar em um link ou div logo após o header
+            container = h2.find_parent('div', class_='simple-view-element')
+            if container:
+                value_div = container.find('div', class_='simple-view-element-body')
+                if value_div:
+                    return value_div.get_text(strip=True)
+        return None
+
+    def _find_pdf(self, soup, base_url):
+        # 1. Meta tag (Geralmente funciona bem no DSpace 7)
+        meta = soup.find('meta', attrs={'name': 'citation_pdf_url'})
+        if meta: return meta.get('content')
+        
+        # 2. Busca link visual de download
+        # <ds-file-download-link ... href="...">
+        links = soup.find_all('a', href=True)
+        for link in links:
+            href = link['href']
+            # Filtros para achar o PDF principal
+            if ('.pdf' in href.lower() or 'download' in href.lower()) and 'bitstream' in href:
+                return urljoin(base_url, href)
+        
+        return '-'
+
+    def _clean_program(self, raw):
+        if not raw: return "-"
+        # Remove prefixos comuns
+        clean = re.sub(r'^(Programa de Pós-Graduação em|Mestrado em|Doutorado em)\s*', '', raw, flags=re.IGNORECASE)
+        return clean.strip()

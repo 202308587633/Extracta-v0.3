@@ -2,7 +2,6 @@ import customtkinter as ctk
 import webbrowser
 from tkinter import ttk
 import tkinter as tk
-from tkinter import messagebox
 import config
 
 class ResultsTab(ctk.CTkFrame):
@@ -12,7 +11,6 @@ class ResultsTab(ctk.CTkFrame):
         self.on_scrape_callback = on_scrape_callback
         self.on_repo_scrape_callback = on_repo_scrape_callback
         
-        # Estruturas para dados
         self.all_data = [] 
         self.item_map = {} 
         self.link_map = {} 
@@ -24,26 +22,29 @@ class ResultsTab(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(2, weight=1)
 
-        # --- 1. Barra de Ferramentas ---
+        # Toolbar
         self.toolbar = ctk.CTkFrame(self, fg_color="transparent")
         self.toolbar.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 5))
 
         self.btn_scrape_pending = ctk.CTkButton(
             self.toolbar, text="⬇️ Baixar HTMLs Pendentes", 
-            command=self.viewmodel.scrape_pending_pprs, height=30,
+            # CORREÇÃO: Chama via results_vm
+            command=self.viewmodel.results_vm.scrape_pending_pprs, height=30,
             fg_color="#1f538d", hover_color="#14375e", font=config.FONTS["normal"]
         )
         self.btn_scrape_pending.pack(side="left", padx=(0, 10))
 
         self.btn_extract_batch = ctk.CTkButton(
             self.toolbar, text="🏷️ Extrair Dados Univ. (Lote)", 
-            command=self.viewmodel.batch_extract_univ_data, height=30,
+            # CORREÇÃO: Chama via results_vm
+            command=self.viewmodel.results_vm.batch_extract_univ_data, height=30,
             fg_color="#27ae60", hover_color="#219150", font=config.FONTS["normal"]
         )
         self.btn_extract_batch.pack(side="left", padx=(0, 10))
 
         self.btn_stop = ctk.CTkButton(
             self.toolbar, text="⏹️ Parar",
+            # CORREÇÃO: Chama via results_vm (já estava correto, mas mantendo padrão)
             command=lambda: self.viewmodel.results_vm.stop_process(), 
             height=30, fg_color="#c0392b", hover_color="#e74c3c",
             state="disabled", font=config.FONTS["normal"]
@@ -52,16 +53,16 @@ class ResultsTab(ctk.CTkFrame):
 
         self.btn_refresh = ctk.CTkButton(
             self.toolbar, text="🔄 Atualizar",
+            # Este método (initialize_data) geralmente fica no MainViewModel para recarregar tudo, então mantemos direto
             command=lambda: self.viewmodel.initialize_data(), height=30,
             fg_color="gray", hover_color="#555555", width=80, font=config.FONTS["normal"]
         )
         self.btn_refresh.pack(side="left")
 
-        # --- 2. Filtros ---
+        # Filtros
         self.filter_frame = ctk.CTkFrame(self)
         self.filter_frame.grid(row=1, column=0, sticky="ew", padx=10, pady=5)
         
-        # Filtros de Texto
         ctk.CTkLabel(self.filter_frame, text="Título:", font=config.FONTS["small"]).pack(side="left", padx=(10, 2))
         self.ent_filter_title = ctk.CTkEntry(self.filter_frame, width=150, placeholder_text="Filtrar...")
         self.ent_filter_title.pack(side="left", padx=5)
@@ -71,13 +72,12 @@ class ResultsTab(ctk.CTkFrame):
         self.ent_filter_author = ctk.CTkEntry(self.filter_frame, width=120, placeholder_text="Filtrar...")
         self.ent_filter_author.pack(side="left", padx=5)
         self.ent_filter_author.bind("<KeyRelease>", self._apply_filters)
-
+        
         ctk.CTkLabel(self.filter_frame, text="Univ.:", font=config.FONTS["small"]).pack(side="left", padx=(10, 2))
         self.ent_filter_univ = ctk.CTkEntry(self.filter_frame, width=80, placeholder_text="Sigla...")
         self.ent_filter_univ.pack(side="left", padx=5)
         self.ent_filter_univ.bind("<KeyRelease>", self._apply_filters)
 
-        # Filtro de Status (NOVO)
         ctk.CTkLabel(self.filter_frame, text="Status HTML:", font=config.FONTS["small"]).pack(side="left", padx=(10, 2))
         self.cmb_filter_status = ctk.CTkComboBox(
             self.filter_frame,
@@ -92,7 +92,7 @@ class ResultsTab(ctk.CTkFrame):
         self.label_count = ctk.CTkLabel(self.filter_frame, text="Total: 0", font=config.FONTS["small"])
         self.label_count.pack(side="right", padx=15)
 
-        # --- 3. Tabela (Treeview) ---
+        # Tabela
         self.container = ctk.CTkFrame(self, fg_color="transparent")
         self.container.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
         self.container.grid_columnconfigure(0, weight=1)
@@ -152,7 +152,6 @@ class ResultsTab(ctk.CTkFrame):
     def set_stop_button_state(self, busy):
         state_stop = "normal" if busy else "disabled"
         state_others = "disabled" if busy else "normal"
-        
         self.btn_stop.configure(state=state_stop)
         self.btn_scrape_pending.configure(state=state_others)
         self.btn_extract_batch.configure(state=state_others)
@@ -170,7 +169,6 @@ class ResultsTab(ctk.CTkFrame):
 
         count = 0
         for idx, item in enumerate(self.all_data):
-            # Filtros de Texto
             title = str(item.get('title', '') or '').lower()
             author = str(item.get('author', '') or '').lower()
             univ = (str(item.get('univ_sigla', '') or '') + str(item.get('univ_nome', '') or '')).lower()
@@ -178,7 +176,6 @@ class ResultsTab(ctk.CTkFrame):
             if not ((f_title in title) and (f_author in author) and (f_univ in univ)):
                 continue
 
-            # Filtro de Status (Cores)
             has_ppb = item.get('has_ppb', 0) == 1
             has_ppr = item.get('has_ppr', 0) == 1
 
@@ -187,7 +184,6 @@ class ResultsTab(ctk.CTkFrame):
             if f_status == "Apenas PPR" and not (not has_ppb and has_ppr): continue
             if f_status == "Sem HTML" and not (not has_ppb and not has_ppr): continue
 
-            # Determina a cor (tag)
             tags = []
             if has_ppb and has_ppr: tags.append('row_complete')
             elif has_ppb: tags.append('row_ppb')
@@ -200,9 +196,7 @@ class ResultsTab(ctk.CTkFrame):
                 item.get('programa', '-')
             )
             
-            # Insere com a tag de cor
             tree_id = self.tree.insert("", "end", values=values, tags=tags)
-            
             self.link_map[tree_id] = {'search': item.get('ppb_link'), 'repo': item.get('ppr_link')}
             self.item_map[tree_id] = idx
             count += 1
@@ -232,6 +226,7 @@ class ResultsTab(ctk.CTkFrame):
                 item = self.all_data[idx]
                 self.viewmodel.handle_result_selection(item.get('title'), item.get('author'))
 
+    # --- Ações de Contexto ---
     def _scrape_selected_row(self):
         sel = self.tree.selection()
         if sel:
@@ -243,6 +238,14 @@ class ResultsTab(ctk.CTkFrame):
         if sel:
             links = self.link_map.get(sel[0])
             if links and links['repo']: self.on_repo_scrape_callback(links['repo'])
+
+    def _extract_univ_from_selection(self):
+        """NOVO: Captura título e autor e chama o parser individual corretamente."""
+        selected = self.tree.selection()
+        if not selected: return
+        values = self.tree.item(selected[0])['values']
+        # CORREÇÃO: Usa .results_vm para acessar o método correto no sub-ViewModel
+        self.viewmodel.results_vm.extract_single_data(values[0], values[1])
 
     def _view_ppb_internal(self):
         selected = self.tree.selection()
@@ -274,9 +277,6 @@ class ResultsTab(ctk.CTkFrame):
         self.viewmodel.handle_result_selection(values[0], values[1])
         self.viewmodel.open_ppr_in_browser()
 
-    def _open_url(self, url):
-        if url: webbrowser.open(url)
-
     def _setup_context_menu(self):
         self.context_menu = tk.Menu(self, tearoff=0)
         self.context_menu.add_command(label="🕷️ Scrap do Link de Busca", command=self._scrape_selected_row)
@@ -288,7 +288,7 @@ class ResultsTab(ctk.CTkFrame):
         self.context_menu.add_command(label="📄 Visualizar PPR na Interface", command=self._view_ppr_internal)
         self.context_menu.add_command(label="🌐 Abrir PPR no Navegador", command=self._view_ppr_browser)
         self.context_menu.add_separator()
-        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (via PPR)", command=self.viewmodel.extract_univ_data)
+        self.context_menu.add_command(label="🎓 Obter Dados da Universidade (via PPR)", command=self._extract_univ_from_selection)
 
     def _show_context_menu(self, event):
         row = self.tree.identify_row(event.y)
