@@ -128,9 +128,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         # Índices para tabela 'pesquisas'
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_link ON pesquisas(link)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_status ON pesquisas(status)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_plb_id ON pesquisas(plb_id)")
+        #cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_link ON pesquisas(link)")
+        #cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_status ON pesquisas(status)")
+        #cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_plb_id ON pesquisas(plb_id)")
         
         # Índices para tabela 'ppr'
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ppr_pesquisa_id ON ppr(pesquisa_id)")
