@@ -73,6 +73,8 @@
 
     "repositorio.enap.gov.br": "EnapParser",
 
-    "repositorio.idp.edu.br": "IdpParser"
+    "repositorio.idp.edu.br": "IdpParser",
+
+    "guaiaca.ufpel.edu.br": "UfpelParser"
   }
 }
