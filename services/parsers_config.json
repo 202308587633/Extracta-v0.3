@@ -97,7 +97,9 @@
 
     "repositorio.ufjf.br": "UfjfParser",
 
-    "repositorio.unifei.edu.br": "UnifeiParser"
+    "repositorio.unifei.edu.br": "UnifeiParser",
+
+    "rdu.unicesumar.edu.br": "UnicesumarParser"
 
   }
 }
