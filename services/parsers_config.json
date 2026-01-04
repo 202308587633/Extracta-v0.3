@@ -77,6 +77,9 @@
 
     "guaiaca.ufpel.edu.br": "UfpelParser",
 
-    "repositorio.ufu.br": "UfuParser"
+    "repositorio.ufu.br": "UfuParser",
+
+    "tede.ufam.edu.br": "UfamParser",
+    ".ufam.edu.br": "UfamParser"
   }
 }
