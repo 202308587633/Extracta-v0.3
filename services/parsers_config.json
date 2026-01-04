@@ -90,6 +90,9 @@
     "tede.bc.uepb.edu.br": "UepbParser",
     ".uepb.edu.br": "UepbParser",
 
-    "repositorio.ufpb.br": "UfpbParser"
+    "repositorio.ufpb.br": "UfpbParser",
+
+    "bdtd.ueg.br": "UegParser",
+    ".ueg.br": "UegParser"
   }
 }
