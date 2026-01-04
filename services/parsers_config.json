@@ -83,6 +83,13 @@
     ".ufam.edu.br": "UfamParser",
 
     "tede2.ufrpe.br": "UfrpeParser",
-    ".ufrpe.br": "UfrpeParser"
+    ".ufrpe.br": "UfrpeParser",
+
+    "tede2.espm.br": "EspmParser",
+
+    "tede.bc.uepb.edu.br": "UepbParser",
+    ".uepb.edu.br": "UepbParser",
+
+    "repositorio.ufpb.br": "UfpbParser"
   }
 }
