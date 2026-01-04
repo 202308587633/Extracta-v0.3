@@ -75,6 +75,8 @@
 
     "repositorio.idp.edu.br": "IdpParser",
 
-    "guaiaca.ufpel.edu.br": "UfpelParser"
+    "guaiaca.ufpel.edu.br": "UfpelParser",
+
+    "repositorio.ufu.br": "UfuParser"
   }
 }
