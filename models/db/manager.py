@@ -19,6 +19,20 @@ class DatabaseManager:
         """Retorna uma nova conexão com o banco."""
         return sqlite3.connect(self.db_name, check_same_thread=False)
 
+    def clear_all_tables(self):
+        """Limpa todas as tabelas (Zera o banco)."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA foreign_keys = OFF;")
+            
+            tables = ['ppb', 'ppr', 'pesquisas', 'plb', 'logs', 'sources']
+            for table in tables:
+                cursor.execute(f"DELETE FROM {table}")
+                cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table}'")
+            
+            cursor.execute("PRAGMA foreign_keys = ON;")
+            conn.commit()
+
     def _init_schema(self):
         """Cria as tabelas se não existirem (para novos bancos)."""
         with self.get_connection() as conn:
@@ -41,76 +55,103 @@ class DatabaseManager:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pesquisas (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT,
-                    author TEXT,
-                    ppb_link TEXT,
-                    ppr_link TEXT,
-                    univ_sigla TEXT,
-                    univ_nome TEXT,
-                    programa TEXT,
-                    search_term TEXT,
-                    search_year TEXT,
-                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    plb_id INTEGER,
+                    titulo TEXT,
+                    link TEXT,
+                    status TEXT DEFAULT 'pending', -- pending, processed, error
+                    search_term TEXT,  -- Coluna adicionada via migração
+                    search_year TEXT,   -- Coluna adicionada via migração
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (plb_id) REFERENCES plb(id)
                 )
             """)
             
-            # Tabelas de Conteúdo (PPB e PPR)
-            # ATUALIZADO: Incluída coluna extracted_at na criação
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS ppb (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    pesquisa_id INTEGER,
-                    url TEXT NOT NULL,
-                    html_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    extracted_at TIMESTAMP,
-                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
-                )
-            """)
+            # Tabela PPR (Páginas de Pesquisa e Resultado - Detalhes)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS ppr (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     pesquisa_id INTEGER,
-                    url TEXT NOT NULL,
+                    url TEXT,
                     html_content TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    extracted_at TIMESTAMP,
-                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE
+                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Coluna adicionada via migração
+                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id)
                 )
             """)
             
-            # Tabelas Auxiliares
+            # Tabela PPB (Páginas de Pesquisa e Busca - Detalhes finais)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS ppb (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pesquisa_id INTEGER,
+                    titulo TEXT,
+                    autor TEXT,
+                    orientador TEXT,
+                    resumo TEXT,
+                    palavras_chave TEXT,
+                    data_defesa TEXT,
+                    instituicao TEXT,
+                    programa TEXT,
+                    link_pdf TEXT,
+                    extracted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Coluna adicionada via migração
+                    FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id)
+                )
+            """)
+
+            # Tabela de Logs de Erro
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    message TEXT NOT NULL,
+                    url TEXT,
+                    erro TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # Tabela de Sources (URLs base para busca)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sources (
-                    root_url TEXT PRIMARY KEY,
-                    status INTEGER DEFAULT 1
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL UNIQUE,
+                    nome TEXT,
+                    ativo BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            
             conn.commit()
+            
+            # Cria índices para melhorar performance
+            self._create_indexes(conn)
+
+    def _create_indexes(self, conn):
+        """Cria índices no banco de dados para melhorar a performance de consultas."""
+        cursor = conn.cursor()
+        
+        # Índices para tabela 'pesquisas'
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_link ON pesquisas(link)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_status ON pesquisas(status)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_pesquisas_plb_id ON pesquisas(plb_id)")
+        
+        # Índices para tabela 'ppr'
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ppr_pesquisa_id ON ppr(pesquisa_id)")
+        
+        # Índices para tabela 'ppb'
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_ppb_pesquisa_id ON ppb(pesquisa_id)")
+        
+        # Índices para tabela 'plb'
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_plb_url ON plb(url)")
+        
+        conn.commit()
 
     def _run_migrations(self):
-        """Aplica alterações estruturais em bancos existentes."""
+        """Roda scripts de migração para atualizar bancos existentes sem perder dados."""
         with self.get_connection() as conn:
             cursor = conn.cursor()
             
-            # Migração para PLB (Termos e Anos)
-            cursor.execute("PRAGMA table_info(plb)")
-            cols_plb = [info[1] for info in cursor.fetchall()]
-            if 'search_term' not in cols_plb:
-                cursor.execute("ALTER TABLE plb ADD COLUMN search_term TEXT")
-            if 'search_year' not in cols_plb:
-                cursor.execute("ALTER TABLE plb ADD COLUMN search_year TEXT")
-
-            # Migração para Pesquisas (Termos e Anos)
+            # Verifica colunas na tabela 'pesquisas'
             cursor.execute("PRAGMA table_info(pesquisas)")
             cols_pesq = [info[1] for info in cursor.fetchall()]
+            
             if 'search_term' not in cols_pesq:
                 cursor.execute("ALTER TABLE pesquisas ADD COLUMN search_term TEXT")
             if 'search_year' not in cols_pesq:
@@ -132,16 +173,5 @@ class DatabaseManager:
             
             conn.commit()
             
-    def clear_all_tables(self):
-        """Limpa todas as tabelas (Zera o banco)."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA foreign_keys = OFF;")
-            
-            tables = ['ppb', 'ppr', 'pesquisas', 'plb', 'logs', 'sources']
-            for table in tables:
-                cursor.execute(f"DELETE FROM {table}")
-                cursor.execute(f"DELETE FROM sqlite_sequence WHERE name='{table}'")
-            
-            cursor.execute("PRAGMA foreign_keys = ON;")
-            conn.commit()
+            # Aplica índices em bancos existentes durante a migração
+            self._create_indexes(conn)

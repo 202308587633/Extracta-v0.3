@@ -17,17 +17,13 @@ class ResultsViewModel(BaseViewModel):
         data = self.repo.get_all()
         self.view.after_thread_safe(lambda: self.view.results_tab.display_results(data))
         self._log("Tabela atualizada.", "white")
-
-    # --- Controle de Processo ---
-    
+ 
     def stop_process(self):
         self._stop_flag = True
         self._log("🛑 Solicitado parada do processo...", "yellow")
 
     def _toggle_ui(self, busy):
         self.view.after_thread_safe(lambda: self.view.results_tab.set_stop_button_state(busy))
-
-    # --- Downloads (Scraping) ---
 
     def scrape_pending_pprs(self):
         pending = self.repo.get_pending_ppr()
@@ -167,18 +163,11 @@ class ResultsViewModel(BaseViewModel):
         self.load_results()
         self._log("Processo finalizado. Aguardando novos comandos.", "white")
         
-    # --- Auxiliares UI ---
-    
     def get_disabled_sources_list(self):
         """Retorna lista de fontes desativadas para a ComboBox."""
         # CORREÇÃO: O nome correto do atributo na classe base é self.sys_repo
         return self.sys_repo.get_disabled_sources()
     
-    
-    #########################
-    
-    # ... dentro de ResultsViewModel ...
-
     def batch_extract_univ_data(self):
         self._log("Buscando registros não identificados ('-' ou 'DSpace')...", "yellow")
         try:
@@ -196,8 +185,6 @@ class ResultsViewModel(BaseViewModel):
         self._toggle_ui(busy=True)
         threading.Thread(target=self._run_univ_extraction, args=(records,)).start()
         
-    # Adicione na classe ResultsViewModel
-
     def delete_stored_html(self, title, author, target_type):
         """Remove o HTML armazenado (PPB ou PPR) para permitir novo download."""
         label = "Busca (PPB)" if target_type == 'ppb' else "Repositório (PPR)"
@@ -208,5 +195,4 @@ class ResultsViewModel(BaseViewModel):
             self.load_results()
         else:
             self._log(f"Erro ao apagar HTML de {label}.", "red")
-            
-    
+
