@@ -93,6 +93,9 @@
     "repositorio.ufpb.br": "UfpbParser",
 
     "bdtd.ueg.br": "UegParser",
-    ".ueg.br": "UegParser"
+    ".ueg.br": "UegParser",
+
+    "repositorio.ufjf.br": "UfjfParser"
+
   }
 }
