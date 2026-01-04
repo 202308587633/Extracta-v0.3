@@ -1,39 +1,91 @@
+import json
 import re
-from parsers.dspace_jspui import DSpaceJSPUIParser
+from bs4 import BeautifulSoup
+from parsers.base_parser import BaseParser
+from urllib.parse import urljoin
 
-class PucspParser(DSpaceJSPUIParser):
+class PucSpParser(BaseParser):
     def __init__(self):
-        super().__init__(sigla="PUCSP", universidade="Pontifícia Universidade Católica de São Paulo")
+        super().__init__(sigla="PUC-SP", universidade="Pontifícia Universidade Católica de São Paulo")
 
-    def _find_program(self, soup):
-        """
-        Estratégia específica para PUCSP (DSpace).
-        Identifica o departamento/programa via classes CSS específicas na tabela de metadados.
-        """
-        # 1. Busca por classes CSS específicas
-        # A PUCSP usa classes como 'dc_publisher_program' ou 'dc_publisher_department'
-        # Ex: <td class="metadataFieldValue dc_publisher_program">Programa de Estudos Pós-Graduados em História</td>
-        target_td = soup.find('td', class_=lambda c: c and 'metadataFieldValue' in c and ('dc_publisher_program' in c or 'dc_publisher_department' in c))
+    def extract(self, html_content, base_url, on_progress=None):
+        return self.extract_pure_soup(html_content, base_url, on_progress)
+
+    def extract_pure_soup(self, html_content, url, on_progress=None):
+        soup = BeautifulSoup(html_content, 'html.parser')
         
-        if target_td:
-            return target_td.get_text(strip=True)
+        data = {
+            'sigla': self.sigla,
+            'universidade': self.universidade,
+            'programa': '-',
+            'link_pdf': '-'
+        }
 
-        # 2. Fallback: Estratégias padrão da classe pai (Labels, Breadcrumbs, Coleções)
-        return super()._find_program(soup)
+        if on_progress: on_progress("PUC-SP (DSpace 7): Analisando estado da aplicação...")
 
-    def _clean_program_name(self, raw):
-        """
-        Limpeza específica para remover prefixos comuns na PUCSP antes da limpeza padrão.
-        """
-        # Remove prefixos específicos como:
-        # "Faculdade de..."
-        # "Programa de Estudos Pós-Graduados em..." (Muito comum na PUCSP)
-        clean = re.sub(
-            r'^(?:Faculdade de|Programa de Estudos Pós-Graduados)(?:\s+(?:em|no|na))?\s+', 
-            '', 
-            raw, 
-            flags=re.IGNORECASE
-        )
+        # 1. Tenta extrair do JSON de estado
+        try:
+            json_data = self._extract_from_json_state(soup)
+            if json_data:
+                data.update(json_data)
+        except Exception as e:
+            if on_progress: on_progress(f"Erro na leitura JSON: {e}")
+
+        # 2. Extração de PDF (Meta tag padrão ou busca de links)
+        data['link_pdf'] = self._find_pdf(soup, url)
+
+        return data
+
+    def _extract_from_json_state(self, soup):
+        script_tag = soup.find('script', id='dspace-angular-state')
+        if not script_tag:
+            return None
+
+        raw_json = script_tag.string or script_tag.get_text()
+        # Decodifica entidades HTML
+        raw_json = raw_json.replace('&q;', '"')
+
+        try:
+            state = json.loads(raw_json)
+            # Navega até o cache de objetos
+            cache = state.get('NGRX_STATE', {}).get('core', {}).get('cache/object', {})
+            
+            program_name = "-"
+            
+            for key, entry in cache.items():
+                obj_data = entry.get('data', {})
+                metadata = obj_data.get('metadata', {})
+                
+                # A PUC-SP usa 'dc.publisher.program'
+                prog_field = metadata.get('dc.publisher.program', [])
+                if prog_field:
+                    raw_prog = prog_field[0].get('value')
+                    # Limpa sufixos como (FD), (FEA), etc.
+                    program_name = re.sub(r'\s*\([A-Z]+\)$', '', raw_prog).strip()
+                    break
+            
+            # Fallback: Coleções
+            if program_name == "-":
+                for key, entry in cache.items():
+                    obj_data = entry.get('data', {})
+                    if obj_data.get('type') == 'collection':
+                        name = obj_data.get('_name', '')
+                        if "Programa de" in name or "Mestrado" in name or "Doutorado" in name:
+                             program_name = re.sub(r'\s*\([A-Z]+\)$', '', name).strip()
+                             break
+
+            return {'programa': program_name}
+
+        except json.JSONDecodeError:
+            return None
+
+    def _find_pdf(self, soup, base_url):
+        # Meta tag padrão
+        meta = soup.find('meta', attrs={'name': 'citation_pdf_url'})
+        if meta: return meta.get('content')
         
-        # Chama a limpeza padrão (que remove "Programa de Pós-Graduação", parênteses finais, etc.)
-        return super()._clean_program_name(clean)
+        # Link do bitstream
+        for a in soup.find_all('a', href=True):
+            if '/bitstreams/' in a['href'] and 'download' in a['href']:
+                return urljoin(base_url, a['href'])
+        return '-'

@@ -49,6 +49,11 @@ from parsers.unifei_parser import UnifeiParser
 from parsers.unicesumar_parser import UnicesumarParser
 from parsers.uftm_parser import UftmParser
 from parsers.ufrrj_parser import UFRRJParser
+from parsers.pucsp_parser import PucSpParser
+from parsers.ufersa_parser import UFERSAParser
+from parsers.unijui_parser import UnijuiParser
+from parsers.ufg_parser import UfgParser
+from parsers.pucrio_parser import PUCRioParser
 
 class ParserFactory:
     def __init__(self, config_filename="parsers_config.json"):
@@ -58,7 +63,12 @@ class ParserFactory:
         # Mapa de classes disponíveis (String -> Classe Real)
         # Isso permite instanciar a classe baseada no nome que está no JSON
         self.available_parsers = {
-            'UfrrjParser': UfrrjParser,
+            'PucRioParser': PUCRioParser,
+            'UfgParser': UfgParser,
+            'UnijuiParser': UnijuiParser,
+            'UfersaParser': UFERSAParser,
+            'PucSpParser': PucSpParser,
+            'UfrrjParser': UFRRJParser,
             'UftmParser': UftmParser,
             'UnicesumarParser': UnicesumarParser,
             'UnifeiParser': UnifeiParser,

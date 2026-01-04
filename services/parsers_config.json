@@ -103,6 +103,16 @@
     
     "bdtd.uftm.edu.br": "UftmParser",
 
-    "rima.ufrrj.br": "UfrrjParser"
+    "rima.ufrrj.br": "UfrrjParser",
+
+    "repositorio.pucsp.br": "PucSpParser",
+
+   "repositorio.ufersa.edu.br": "UfersaParser",
+   
+   "bibliodigital.unijui.edu.br": "UnijuiParser",
+
+   "repositorio.bc.ufg.br": "UfgParser",
+
+   "www.maxwell.vrac.puc-rio.br": "PucRioParser"
   }
 }
