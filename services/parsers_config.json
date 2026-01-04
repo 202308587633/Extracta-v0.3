@@ -80,6 +80,9 @@
     "repositorio.ufu.br": "UfuParser",
 
     "tede.ufam.edu.br": "UfamParser",
-    ".ufam.edu.br": "UfamParser"
+    ".ufam.edu.br": "UfamParser",
+
+    "tede2.ufrpe.br": "UfrpeParser",
+    ".ufrpe.br": "UfrpeParser"
   }
 }
