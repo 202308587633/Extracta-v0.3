@@ -101,6 +101,8 @@
 
     "rdu.unicesumar.edu.br": "UnicesumarParser",
     
-    "bdtd.uftm.edu.br": "UftmParser"
+    "bdtd.uftm.edu.br": "UftmParser",
+
+    "rima.ufrrj.br": "UfrrjParser"
   }
 }
